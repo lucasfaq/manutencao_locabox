@@ -131,13 +131,14 @@ export function App() {
 
   async function createOrdem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
         await createSupabaseOrdem(payload);
-        event.currentTarget.reset();
+        formElement.reset();
         await load();
         setPage("ordens");
         return;
@@ -172,24 +173,25 @@ export function App() {
           .filter(Boolean)
       };
       setData((current) => withMetrics({ ...current, ordens: [ordem, ...current.ordens] }));
-      event.currentTarget.reset();
+      formElement.reset();
       setPage("ordens");
       return;
     }
-    event.currentTarget.reset();
+    formElement.reset();
     await load();
     setPage("ordens");
   }
 
   async function createAtendimento(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
         await createSupabaseAtendimento(payload);
-        event.currentTarget.reset();
+        formElement.reset();
         await load();
         setPage("atendimentos");
         return;
@@ -228,11 +230,11 @@ export function App() {
             : ordem
         )
       }));
-      event.currentTarget.reset();
+      formElement.reset();
       setPage("atendimentos");
       return;
     }
-    event.currentTarget.reset();
+    formElement.reset();
     await load();
     setPage("atendimentos");
   }
