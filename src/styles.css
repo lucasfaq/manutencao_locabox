@@ -145,6 +145,47 @@ main {
   gap: 10px;
 }
 
+.source-pill {
+  border: 1px solid #dbe2dc;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #ffffff;
+  color: #3f5047;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.source-pill.supabase {
+  border-color: #bfe8d1;
+  background: #e8f7ee;
+  color: #17713f;
+}
+
+.source-pill.api {
+  border-color: #c8d9ff;
+  background: #eef4ff;
+  color: #244e96;
+}
+
+.source-pill.static {
+  border-color: #f2d892;
+  background: #fff6d6;
+  color: #805f00;
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #f1c0b7;
+  border-radius: 8px;
+  background: #fff0ed;
+  color: #8f2419;
+  padding: 12px 14px;
+  font-weight: 700;
+}
+
 .search {
   display: flex;
   align-items: center;
@@ -563,6 +604,10 @@ td small {
   .search {
     width: 100%;
     min-width: 0;
+  }
+
+  .source-pill {
+    order: 3;
   }
 
   .stats-row,

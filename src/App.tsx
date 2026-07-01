@@ -86,22 +86,29 @@ export function App() {
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<"supabase" | "api" | "static">("static");
+  const [errorMessage, setErrorMessage] = useState("");
 
   async function load() {
     setLoading(true);
+    setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
         setData(await loadSupabaseBootstrap());
+        setSource("supabase");
       } else {
         const response = await fetch("/api/bootstrap");
         if (!response.ok) throw new Error("API indisponivel");
         const nextData = (await response.json()) as Bootstrap;
         setData(nextData);
+        setSource("api");
       }
-    } catch {
+    } catch (error) {
       const response = await fetch(`${import.meta.env.BASE_URL}bootstrap.json`);
       const nextData = (await response.json()) as Bootstrap;
       setData(nextData);
+      setSource("static");
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar dados dinamicos.");
     }
     setLoading(false);
   }
@@ -126,9 +133,14 @@ export function App() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
+    setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
         await createSupabaseOrdem(payload);
+        event.currentTarget.reset();
+        await load();
+        setPage("ordens");
+        return;
       } else {
         const response = await fetch("/api/ordens", {
           method: "POST",
@@ -137,7 +149,11 @@ export function App() {
         });
         if (!response.ok) throw new Error("API indisponivel");
       }
-    } catch {
+    } catch (error) {
+      if (hasSupabaseConfig) {
+        setErrorMessage(error instanceof Error ? error.message : "Falha ao gravar OS no Supabase.");
+        return;
+      }
       const id = data.ordens.length ? Math.max(...data.ordens.map((ordem) => ordem.id)) + 1 : 1;
       const ordem: Ordem = {
         id,
@@ -169,9 +185,14 @@ export function App() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
+    setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
         await createSupabaseAtendimento(payload);
+        event.currentTarget.reset();
+        await load();
+        setPage("atendimentos");
+        return;
       } else {
         const response = await fetch("/api/atendimentos", {
           method: "POST",
@@ -180,7 +201,11 @@ export function App() {
         });
         if (!response.ok) throw new Error("API indisponivel");
       }
-    } catch {
+    } catch (error) {
+      if (hasSupabaseConfig) {
+        setErrorMessage(error instanceof Error ? error.message : "Falha ao gravar atendimento no Supabase.");
+        return;
+      }
       const id = data.atendimentos.length ? Math.max(...data.atendimentos.map((atendimento) => atendimento.id)) + 1 : 1;
       const atendimento: Atendimento = {
         id,
@@ -237,8 +262,8 @@ export function App() {
         </nav>
         <div className="source-box">
           <span>Origem atual</span>
-          <strong>JSON sincronizavel</strong>
-          <small>Access preservado sem escrita direta</small>
+          <strong>{source === "supabase" ? "Supabase online" : source === "api" ? "API local" : "JSON estatico"}</strong>
+          <small>{source === "supabase" ? "Gravacao persistente ativa" : "Fallback sem persistencia online"}</small>
         </div>
       </aside>
 
@@ -252,6 +277,7 @@ export function App() {
             <p>Controle operacional dinamico de OS, unidades, atendimentos e estoque.</p>
           </div>
           <div className="topbar-actions">
+            <span className={`source-pill ${source}`}>{source === "supabase" ? "Supabase" : source === "api" ? "API local" : "Estatico"}</span>
             <label className="search">
               <Search size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar OS, unidade, cliente" />
@@ -261,6 +287,13 @@ export function App() {
             </button>
           </div>
         </header>
+
+        {errorMessage && (
+          <div className="error-banner">
+            <AlertTriangle size={18} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {page === "dashboard" && (
           <section className="content-grid">
