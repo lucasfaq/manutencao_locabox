@@ -15,67 +15,19 @@ import {
   Wrench
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Atendimento,
+  Bootstrap,
+  createSupabaseAtendimento,
+  createSupabaseOrdem,
+  hasSupabaseConfig,
+  loadSupabaseBootstrap,
+  Ordem,
+  Unidade,
+  withMetrics
+} from "./supabaseClient";
 
-type Status = "Aberta" | "Agendada" | "Em atendimento" | "Pendente" | "Concluida";
 type Page = "dashboard" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
-
-type Unidade = {
-  id: number;
-  codigo: string;
-  nome: string;
-  cliente: string;
-  contrato: string;
-  projeto: string;
-  municipio: string;
-  status: string;
-};
-
-type Ordem = {
-  id: number;
-  unidadeId: number;
-  protocolo: string;
-  tipo: string;
-  prioridade: "P1" | "P2" | "P3" | "P4";
-  status: Status;
-  abertura: string;
-  prazoSla: string;
-  responsavel: string;
-  descricao: string;
-  pendencias: string[];
-};
-
-type Atendimento = {
-  id: number;
-  ordemId: number;
-  data: string;
-  equipe: string;
-  status: "Executado" | "Parcial" | "Reagendado";
-  relato: string;
-  materiais: string[];
-};
-
-type EstoqueItem = {
-  id: number;
-  item: string;
-  categoria: string;
-  unidade: string;
-  quantidade: number;
-  minimo: number;
-};
-
-type Bootstrap = {
-  unidades: Unidade[];
-  ordens: Ordem[];
-  atendimentos: Atendimento[];
-  estoque: EstoqueItem[];
-  metrics: {
-    unidades: number;
-    ordensAbertas: number;
-    slaVencidas: number;
-    atendimentos: number;
-    estoqueBaixo: number;
-  };
-};
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -109,21 +61,6 @@ function getSla(ordem: Ordem) {
   return { label: `${diff}d restantes`, tone: "ok" };
 }
 
-function metricsFor(nextData: Omit<Bootstrap, "metrics">) {
-  const abertas = nextData.ordens.filter((ordem) => ordem.status !== "Concluida");
-  return {
-    unidades: nextData.unidades.length,
-    ordensAbertas: abertas.length,
-    slaVencidas: abertas.filter((ordem) => getSla(ordem).tone === "danger").length,
-    atendimentos: nextData.atendimentos.length,
-    estoqueBaixo: nextData.estoque.filter((item) => item.quantidade <= item.minimo).length
-  };
-}
-
-function withMetrics(nextData: Omit<Bootstrap, "metrics">): Bootstrap {
-  return { ...nextData, metrics: metricsFor(nextData) };
-}
-
 function StatusPill({ value }: { value: string }) {
   const tone = value === "Concluida" || value === "Executado" ? "ok" : value === "Pendente" || value === "Parcial" ? "warn" : "info";
   return <span className={`pill ${tone}`}>{value}</span>;
@@ -153,10 +90,14 @@ export function App() {
   async function load() {
     setLoading(true);
     try {
-      const response = await fetch("/api/bootstrap");
-      if (!response.ok) throw new Error("API indisponivel");
-      const nextData = (await response.json()) as Bootstrap;
-      setData(nextData);
+      if (hasSupabaseConfig) {
+        setData(await loadSupabaseBootstrap());
+      } else {
+        const response = await fetch("/api/bootstrap");
+        if (!response.ok) throw new Error("API indisponivel");
+        const nextData = (await response.json()) as Bootstrap;
+        setData(nextData);
+      }
     } catch {
       const response = await fetch(`${import.meta.env.BASE_URL}bootstrap.json`);
       const nextData = (await response.json()) as Bootstrap;
@@ -186,12 +127,16 @@ export function App() {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
     try {
-      const response = await fetch("/api/ordens", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) throw new Error("API indisponivel");
+      if (hasSupabaseConfig) {
+        await createSupabaseOrdem(payload);
+      } else {
+        const response = await fetch("/api/ordens", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error("API indisponivel");
+      }
     } catch {
       const id = data.ordens.length ? Math.max(...data.ordens.map((ordem) => ordem.id)) + 1 : 1;
       const ordem: Ordem = {
@@ -225,12 +170,16 @@ export function App() {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
     try {
-      const response = await fetch("/api/atendimentos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) throw new Error("API indisponivel");
+      if (hasSupabaseConfig) {
+        await createSupabaseAtendimento(payload);
+      } else {
+        const response = await fetch("/api/atendimentos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error("API indisponivel");
+      }
     } catch {
       const id = data.atendimentos.length ? Math.max(...data.atendimentos.map((atendimento) => atendimento.id)) + 1 : 1;
       const atendimento: Atendimento = {

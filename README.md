@@ -40,6 +40,17 @@ PORT=4174
 
 Sem essas variaveis, a API usa `data/store.json`.
 
+Para o GitHub Pages conectar direto no Supabase, configure no repositorio:
+
+```text
+Settings > Secrets and variables > Actions
+Variables:
+  VITE_SUPABASE_URL=https://nyroltiqmkvxcujxapzf.supabase.co
+
+Secrets:
+  VITE_SUPABASE_ANON_KEY=...
+```
+
 Migrations:
 
 ```text

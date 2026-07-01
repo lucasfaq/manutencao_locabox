@@ -122,3 +122,47 @@ for all using (auth.role() = 'service_role') with check (auth.role() = 'service_
 drop policy if exists "service role full access estoque" on public.estoque;
 create policy "service role full access estoque" on public.estoque
 for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+
+drop policy if exists "anon read unidades" on public.unidades;
+create policy "anon read unidades" on public.unidades
+for select using (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon read ordens" on public.ordens;
+create policy "anon read ordens" on public.ordens
+for select using (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon write ordens" on public.ordens;
+create policy "anon write ordens" on public.ordens
+for insert with check (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon update ordens" on public.ordens;
+create policy "anon update ordens" on public.ordens
+for update using (auth.role() in ('anon', 'authenticated')) with check (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon read pendencias_ordem" on public.pendencias_ordem;
+create policy "anon read pendencias_ordem" on public.pendencias_ordem
+for select using (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon write pendencias_ordem" on public.pendencias_ordem;
+create policy "anon write pendencias_ordem" on public.pendencias_ordem
+for insert with check (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon read atendimentos" on public.atendimentos;
+create policy "anon read atendimentos" on public.atendimentos
+for select using (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon write atendimentos" on public.atendimentos;
+create policy "anon write atendimentos" on public.atendimentos
+for insert with check (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon read atendimento_materiais" on public.atendimento_materiais;
+create policy "anon read atendimento_materiais" on public.atendimento_materiais
+for select using (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon write atendimento_materiais" on public.atendimento_materiais;
+create policy "anon write atendimento_materiais" on public.atendimento_materiais
+for insert with check (auth.role() in ('anon', 'authenticated'));
+
+drop policy if exists "anon read estoque" on public.estoque;
+create policy "anon read estoque" on public.estoque
+for select using (auth.role() in ('anon', 'authenticated'));
