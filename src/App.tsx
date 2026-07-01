@@ -109,6 +109,21 @@ function getSla(ordem: Ordem) {
   return { label: `${diff}d restantes`, tone: "ok" };
 }
 
+function metricsFor(nextData: Omit<Bootstrap, "metrics">) {
+  const abertas = nextData.ordens.filter((ordem) => ordem.status !== "Concluida");
+  return {
+    unidades: nextData.unidades.length,
+    ordensAbertas: abertas.length,
+    slaVencidas: abertas.filter((ordem) => getSla(ordem).tone === "danger").length,
+    atendimentos: nextData.atendimentos.length,
+    estoqueBaixo: nextData.estoque.filter((item) => item.quantidade <= item.minimo).length
+  };
+}
+
+function withMetrics(nextData: Omit<Bootstrap, "metrics">): Bootstrap {
+  return { ...nextData, metrics: metricsFor(nextData) };
+}
+
 function StatusPill({ value }: { value: string }) {
   const tone = value === "Concluida" || value === "Executado" ? "ok" : value === "Pendente" || value === "Parcial" ? "warn" : "info";
   return <span className={`pill ${tone}`}>{value}</span>;
@@ -137,9 +152,16 @@ export function App() {
 
   async function load() {
     setLoading(true);
-    const response = await fetch("/api/bootstrap");
-    const nextData = (await response.json()) as Bootstrap;
-    setData(nextData);
+    try {
+      const response = await fetch("/api/bootstrap");
+      if (!response.ok) throw new Error("API indisponivel");
+      const nextData = (await response.json()) as Bootstrap;
+      setData(nextData);
+    } catch {
+      const response = await fetch(`${import.meta.env.BASE_URL}bootstrap.json`);
+      const nextData = (await response.json()) as Bootstrap;
+      setData(nextData);
+    }
     setLoading(false);
   }
 
@@ -162,11 +184,37 @@ export function App() {
   async function createOrdem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    await fetch("/api/ordens", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(form.entries()))
-    });
+    const payload = Object.fromEntries(form.entries());
+    try {
+      const response = await fetch("/api/ordens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error("API indisponivel");
+    } catch {
+      const id = data.ordens.length ? Math.max(...data.ordens.map((ordem) => ordem.id)) + 1 : 1;
+      const ordem: Ordem = {
+        id,
+        unidadeId: Number(payload.unidadeId),
+        protocolo: `OS-${new Date().getFullYear()}-${String(id).padStart(4, "0")}`,
+        tipo: String(payload.tipo || "Corretiva"),
+        prioridade: (payload.prioridade as Ordem["prioridade"]) || "P3",
+        status: "Aberta",
+        abertura: new Date().toISOString().slice(0, 10),
+        prazoSla: String(payload.prazoSla),
+        responsavel: String(payload.responsavel || "A definir"),
+        descricao: String(payload.descricao || ""),
+        pendencias: String(payload.pendencias || "")
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      };
+      setData((current) => withMetrics({ ...current, ordens: [ordem, ...current.ordens] }));
+      event.currentTarget.reset();
+      setPage("ordens");
+      return;
+    }
     event.currentTarget.reset();
     await load();
     setPage("ordens");
@@ -175,11 +223,41 @@ export function App() {
   async function createAtendimento(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    await fetch("/api/atendimentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(form.entries()))
-    });
+    const payload = Object.fromEntries(form.entries());
+    try {
+      const response = await fetch("/api/atendimentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error("API indisponivel");
+    } catch {
+      const id = data.atendimentos.length ? Math.max(...data.atendimentos.map((atendimento) => atendimento.id)) + 1 : 1;
+      const atendimento: Atendimento = {
+        id,
+        ordemId: Number(payload.ordemId),
+        data: String(payload.data || new Date().toISOString().slice(0, 10)),
+        equipe: String(payload.equipe || "Equipe interna"),
+        status: (payload.status as Atendimento["status"]) || "Executado",
+        relato: String(payload.relato || ""),
+        materiais: String(payload.materiais || "")
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      };
+      setData((current) => withMetrics({
+        ...current,
+        atendimentos: [atendimento, ...current.atendimentos],
+        ordens: current.ordens.map((ordem) =>
+          ordem.id === atendimento.ordemId
+            ? { ...ordem, status: atendimento.status === "Executado" ? "Concluida" : "Pendente" }
+            : ordem
+        )
+      }));
+      event.currentTarget.reset();
+      setPage("atendimentos");
+      return;
+    }
     event.currentTarget.reset();
     await load();
     setPage("atendimentos");
