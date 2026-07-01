@@ -1,0 +1,89 @@
+# Handoff - Manutencao Locabox
+
+Atualizado em: 2026-07-01
+
+## Objetivo
+
+Evoluir o controle de manutencao legado em MS Access para um sistema web responsivo, publicado no GitHub Pages e persistindo dados no Supabase.
+
+## Repositorio e ambientes
+
+- Repositorio GitHub: https://github.com/lucasfaq/manutencao_locabox
+- GitHub Pages: https://lucasfaq.github.io/manutencao_locabox/
+- App local: `apps/manutencao-web`
+- Supabase project ref: `nyroltiqmkvxcujxapzf`
+- Supabase URL: `https://nyroltiqmkvxcujxapzf.supabase.co`
+
+## Estado atual implementado
+
+- Frontend em Vite + React + TypeScript.
+- Deploy automatico por GitHub Actions para GitHub Pages.
+- Integracao com Supabase via `@supabase/supabase-js` direto no frontend.
+- Leitura e criacao de OS funcionando no Supabase.
+- Painel com paginas de OS, unidades, atendimentos, estoque e relatorios simples.
+- Indicador visual da origem dos dados: Supabase, API local ou JSON estatico.
+- Banner de erro quando a persistencia no Supabase falha.
+- Correcoes publicadas:
+  - `bbb4563` - mostra erro de persistencia e evita falsa gravacao local.
+  - `3bf9c8d` - corrige `reset()` assíncrono do formulario.
+
+## Schema atual
+
+Migration inicial em `supabase/migrations/20260701110000_initial_schema.sql` com:
+
+- `unidades`
+- `ordens`
+- `pendencias_ordem`
+- `atendimentos`
+- `atendimento_materiais`
+- `estoque`
+
+Observacao: este schema e um MVP funcional. Ainda nao e o modelo final seguro com autenticacao, perfis e RLS por usuario.
+
+## Pontos validados
+
+- GitHub Pages esta servindo o build mais recente.
+- Build de producao passa com `GITHUB_PAGES=true npm run build`.
+- A anon key publicada consegue ler dados.
+- Teste controlado de INSERT em `ordens` chegou ao banco e falhou por FK proposital, nao por RLS/permissao.
+- Usuario testou criacao de OS e confirmou funcionamento.
+
+## Prompt analisado do Claude Code
+
+O prompt recebido define uma arquitetura final mais robusta:
+
+- Supabase Auth com e-mail/senha.
+- Perfis `tecnico` e `gestor`.
+- RLS por usuario autenticado.
+- Schema completo com contratos, projetos, unidades, equipes, materiais e movimentacoes.
+- Status derivados por triggers.
+- Estoque controlado por movimentacoes.
+- Relatorios restritos a gestor.
+
+Avaliacao: o prompt esta correto como direcao, mas deve ser aplicado de forma incremental. Ele e mais "greenfield" que o MVP atual e mudaria o schema de forma estrutural.
+
+## Proximo passo recomendado
+
+Antes de novas telas, fazer a Fase 1 real de seguranca:
+
+1. Criar `docs/DECISIONS.md`.
+2. Criar migration para `perfil_usuario`, `perfis` e funcao `is_gestor()`.
+3. Implementar login Supabase Auth no frontend.
+4. Substituir policies anonimas por policies `authenticated`.
+5. Testar RLS com usuario tecnico e gestor.
+6. Depois expandir schema para contratos, projetos, colaboradores, equipes e movimentacoes.
+
+## Como retomar no Codex
+
+Ao iniciar uma nova sessao, pedir:
+
+```text
+Leia apps/manutencao-web/docs/HANDOFF.md e retome o projeto manutencao_locabox a partir do proximo passo recomendado.
+```
+
+Se quiser continuar pela seguranca:
+
+```text
+Leia o handoff e implemente a Fase 1 real: Supabase Auth, perfis tecnico/gestor e RLS authenticated, em commits pequenos.
+```
+
