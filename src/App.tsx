@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   ClipboardList,
   LayoutDashboard,
+  LogOut,
   MapPin,
   Menu,
   PackageSearch,
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
   Wrench
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -20,9 +22,16 @@ import {
   Bootstrap,
   createSupabaseAtendimento,
   createSupabaseOrdem,
+  getCurrentSession,
   hasSupabaseConfig,
+  loadPerfil,
   loadSupabaseBootstrap,
   Ordem,
+  PerfilUsuario,
+  Session,
+  signInWithPassword,
+  signOut,
+  supabase,
   Unidade,
   withMetrics
 } from "./supabaseClient";
@@ -88,6 +97,9 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<"supabase" | "api" | "static">("static");
   const [errorMessage, setErrorMessage] = useState("");
+  const [authReady, setAuthReady] = useState(!hasSupabaseConfig);
+  const [session, setSession] = useState<Session | null>(null);
+  const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
 
   async function load() {
     setLoading(true);
@@ -114,8 +126,51 @@ export function App() {
   }
 
   useEffect(() => {
-    load().catch(() => setLoading(false));
+    if (!hasSupabaseConfig) {
+      setAuthReady(true);
+      return;
+    }
+
+    getCurrentSession()
+      .then((nextSession) => setSession(nextSession))
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar sessao."))
+      .finally(() => setAuthReady(true));
+
+    const subscription = supabase?.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+
+    return () => {
+      subscription?.data.subscription.unsubscribe();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!authReady) return;
+    if (hasSupabaseConfig && !session) {
+      setData(initialData);
+      setPerfil(null);
+      setSource("supabase");
+      setLoading(false);
+      return;
+    }
+
+    load().catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar dados.");
+      setLoading(false);
+    });
+  }, [authReady, session?.access_token]);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !session) {
+      setPerfil(null);
+      return;
+    }
+
+    loadPerfil()
+      .then((nextPerfil) => setPerfil(nextPerfil))
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar perfil."));
+  }, [session?.user.id]);
 
   const filteredOrdens = useMemo(() => {
     const text = query.toLowerCase();
@@ -239,6 +294,23 @@ export function App() {
     setPage("atendimentos");
   }
 
+  async function handleSignOut() {
+    setErrorMessage("");
+    try {
+      await signOut();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao sair.");
+    }
+  }
+
+  if (hasSupabaseConfig && !authReady) {
+    return <LoadingScreen />;
+  }
+
+  if (hasSupabaseConfig && !session) {
+    return <AuthScreen errorMessage={errorMessage} onError={setErrorMessage} />;
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
@@ -265,7 +337,7 @@ export function App() {
         <div className="source-box">
           <span>Origem atual</span>
           <strong>{source === "supabase" ? "Supabase online" : source === "api" ? "API local" : "JSON estatico"}</strong>
-          <small>{source === "supabase" ? "Gravacao persistente ativa" : "Fallback sem persistencia online"}</small>
+          <small>{source === "supabase" ? `Sessao ${perfil?.perfil || "autenticada"}` : "Fallback sem persistencia online"}</small>
         </div>
       </aside>
 
@@ -280,6 +352,12 @@ export function App() {
           </div>
           <div className="topbar-actions">
             <span className={`source-pill ${source}`}>{source === "supabase" ? "Supabase" : source === "api" ? "API local" : "Estatico"}</span>
+            {hasSupabaseConfig && (
+              <span className="profile-pill" title={session?.user.email || "Usuario autenticado"}>
+                <ShieldCheck size={15} />
+                {perfil?.perfil || "perfil"}
+              </span>
+            )}
             <label className="search">
               <Search size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar OS, unidade, cliente" />
@@ -287,6 +365,11 @@ export function App() {
             <button className="icon-button" title="Atualizar" onClick={load}>
               <RefreshCw size={18} className={loading ? "spin" : ""} />
             </button>
+            {hasSupabaseConfig && (
+              <button className="icon-button" title="Sair" onClick={handleSignOut}>
+                <LogOut size={18} />
+              </button>
+            )}
           </div>
         </header>
 
@@ -468,6 +551,79 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel">
+        <div className="brand-mark">
+          <Wrench size={20} />
+        </div>
+        <h1>Locabox Manutencao</h1>
+        <p>Carregando sessao.</p>
+      </section>
+    </main>
+  );
+}
+
+function AuthScreen({
+  errorMessage,
+  onError
+}: {
+  errorMessage: string;
+  onError: (message: string) => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") || "");
+    const password = String(form.get("password") || "");
+
+    onError("");
+    setSubmitting(true);
+    try {
+      await signInWithPassword(email, password);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Falha ao entrar.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel">
+        <div className="brand-mark">
+          <Wrench size={20} />
+        </div>
+        <h1>Locabox Manutencao</h1>
+        <p>Acesso restrito a usuarios autorizados.</p>
+        {errorMessage && (
+          <div className="error-banner">
+            <AlertTriangle size={18} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+        <form className="form-grid auth-form" onSubmit={handleSubmit}>
+          <label className="wide">
+            Email
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <label className="wide">
+            Senha
+            <input name="password" type="password" autoComplete="current-password" required />
+          </label>
+          <button className="primary-button" disabled={submitting}>
+            <ShieldCheck size={16} />
+            {submitting ? "Entrando" : "Entrar"}
+          </button>
+        </form>
+      </section>
+    </main>
   );
 }
 

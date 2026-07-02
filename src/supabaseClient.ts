@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, Session } from "@supabase/supabase-js";
 
 export type Status = "Aberta" | "Agendada" | "Em atendimento" | "Pendente" | "Concluida";
 export type Prioridade = "P1" | "P2" | "P3" | "P4";
@@ -47,6 +47,13 @@ export type EstoqueItem = {
   minimo: number;
 };
 
+export type PerfilUsuario = {
+  userId: string;
+  nome: string;
+  perfil: "tecnico" | "gestor";
+  ativo: boolean;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -74,6 +81,8 @@ export const supabase = hasSupabaseConfig
       }
     })
   : null;
+
+export type { Session };
 
 function getSlaTone(ordem: Ordem) {
   if (ordem.status === "Concluida") return "ok";
@@ -127,6 +136,43 @@ function parseLines(value: unknown) {
 function requireSupabase() {
   if (!supabase) throw new Error("Supabase nao configurado");
   return supabase;
+}
+
+export async function getCurrentSession() {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getSession();
+  if (error) throw error;
+  return data.session;
+}
+
+export async function signInWithPassword(email: string, password: string) {
+  const client = requireSupabase();
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+export async function signOut() {
+  const client = requireSupabase();
+  const { error } = await client.auth.signOut();
+  if (error) throw error;
+}
+
+export async function loadPerfil(): Promise<PerfilUsuario | null> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("perfis")
+    .select("user_id, nome, perfil, ativo")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    userId: data.user_id,
+    nome: data.nome,
+    perfil: data.perfil,
+    ativo: data.ativo
+  };
 }
 
 export async function loadSupabaseBootstrap(): Promise<Bootstrap> {

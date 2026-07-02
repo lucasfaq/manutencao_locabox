@@ -156,6 +156,20 @@ main {
   white-space: nowrap;
 }
 
+.profile-pill {
+  border: 1px solid #cfded5;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #ffffff;
+  color: #294e3a;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .source-pill.supabase {
   border-color: #bfe8d1;
   background: #e8f7ee;
@@ -172,6 +186,42 @@ main {
   border-color: #f2d892;
   background: #fff6d6;
   color: #805f00;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f4f6f1;
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  background: #ffffff;
+  border: 1px solid #dfe5df;
+  border-radius: 8px;
+  box-shadow: 0 16px 32px rgba(23, 33, 28, 0.1);
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.auth-panel h1,
+.auth-panel p {
+  margin: 0;
+}
+
+.auth-panel h1 {
+  font-size: 26px;
+}
+
+.auth-panel p {
+  color: #5f6f65;
+}
+
+.auth-form {
+  grid-template-columns: 1fr;
 }
 
 .error-banner {
@@ -229,6 +279,11 @@ main {
   background: #f0c94a;
   padding: 0 14px;
   font-weight: 700;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .content-grid {

@@ -1,6 +1,6 @@
 # Handoff - Manutencao Locabox
 
-Atualizado em: 2026-07-01
+Atualizado em: 2026-07-02
 
 ## Objetivo
 
@@ -26,6 +26,13 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
 - Correcoes publicadas:
   - `bbb4563` - mostra erro de persistencia e evita falsa gravacao local.
   - `3bf9c8d` - corrige `reset()` assíncrono do formulario.
+- Fase 1 de seguranca iniciada em 2026-07-02:
+  - tela de login com Supabase Auth;
+  - tabela `perfis` com perfis `tecnico` e `gestor`;
+  - schema `private` para funcoes auxiliares de RLS;
+  - remocao das policies anonimas;
+  - policies `authenticated` com usuario ativo em `perfis`;
+  - advisors de seguranca do Supabase sem alertas apos ajuste.
 
 ## Schema atual
 
@@ -39,6 +46,15 @@ Migration inicial em `supabase/migrations/20260701110000_initial_schema.sql` com
 - `estoque`
 
 Observacao: este schema e um MVP funcional. Ainda nao e o modelo final seguro com autenticacao, perfis e RLS por usuario.
+
+Migration de seguranca em `supabase/migrations/20260702120000_auth_perfis_rls.sql` com:
+
+- enum `perfil_usuario`;
+- tabela `perfis`;
+- trigger de criacao de perfil tecnico para novos usuarios Auth;
+- funcoes privadas `has_active_profile()` e `is_gestor()`;
+- policies somente para `authenticated`;
+- bloqueio de `anon` nas tabelas e sequences publicas do app.
 
 ## Pontos validados
 
@@ -62,15 +78,24 @@ O prompt recebido define uma arquitetura final mais robusta:
 
 Avaliacao: o prompt esta correto como direcao, mas deve ser aplicado de forma incremental. Ele e mais "greenfield" que o MVP atual e mudaria o schema de forma estrutural.
 
+## Validacao de 2026-07-02
+
+- Build local passou com `npm run build`.
+- SQL aplicado no Supabase remoto.
+- `anon` bloqueado para leitura de `public.ordens`.
+- Advisors de seguranca retornaram sem lints.
+- Advisors de performance mostram apenas indices ainda nao usados, esperado para uma base pequena.
+- `public.perfis` esta vazia porque ainda nao ha usuarios Auth cadastrados no projeto.
+
 ## Proximo passo recomendado
 
-Antes de novas telas, fazer a Fase 1 real de seguranca:
+Concluir a Fase 1 real de seguranca com usuarios reais:
 
-1. Criar `docs/DECISIONS.md`.
-2. Criar migration para `perfil_usuario`, `perfis` e funcao `is_gestor()`.
-3. Implementar login Supabase Auth no frontend.
-4. Substituir policies anonimas por policies `authenticated`.
-5. Testar RLS com usuario tecnico e gestor.
+1. Criar ao menos um usuario no Supabase Auth.
+2. Promover um usuario gestor via SQL, se necessario.
+3. Testar login no GitHub Pages.
+4. Testar criacao de OS com usuario tecnico.
+5. Testar permissoes de gestor.
 6. Depois expandir schema para contratos, projetos, colaboradores, equipes e movimentacoes.
 
 ## Como retomar no Codex
@@ -84,6 +109,5 @@ Leia apps/manutencao-web/docs/HANDOFF.md e retome o projeto manutencao_locabox a
 Se quiser continuar pela seguranca:
 
 ```text
-Leia o handoff e implemente a Fase 1 real: Supabase Auth, perfis tecnico/gestor e RLS authenticated, em commits pequenos.
+Leia o handoff e conclua a Fase 1 real: crie/teste usuarios Supabase Auth, promova um gestor, valide RLS com tecnico/gestor e publique o build.
 ```
-

@@ -55,12 +55,32 @@ Migrations:
 
 ```text
 supabase/migrations/20260701110000_initial_schema.sql
+supabase/migrations/20260702120000_auth_perfis_rls.sql
 ```
 
 Seed:
 
 ```text
 supabase/seed.sql
+```
+
+### Auth e perfis
+
+Quando `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estiverem configurados, o app exige login por Supabase Auth.
+
+Perfis operacionais:
+
+```text
+tecnico: leitura, criacao de OS, pendencias e atendimentos
+gestor: tecnico + manutencao futura de cadastros e estoque
+```
+
+Para promover um usuario a gestor:
+
+```sql
+update public.perfis
+set perfil = 'gestor'
+where user_id = '<auth-user-id>';
 ```
 
 ## GitHub
