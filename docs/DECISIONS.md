@@ -15,3 +15,5 @@
 | 2026-07-02 | As tabelas MVP antigas permanecem enquanto o frontend migra para o schema canonico | Evita quebrar o GitHub Pages antes da Fase 2 substituir as telas pelos cadastros novos |
 | 2026-07-02 | Criacao de OS canonica deve usar a funcao `public.criar_ordem_manutencao(...)` | Garante insercao atomica da OS com pendencias selecionadas do catalogo |
 | 2026-07-02 | A view `vw_atendimentos_por_projeto` usa `security_invoker` e filtro de gestor | Relatorios sao restritos a gestor e continuam respeitando RLS nas tabelas base |
+| 2026-07-02 | Fase 2 deve migrar um cadastro por commit, comecando por `clientes` | Mantem rastreabilidade e evita misturar dependencias de cadastros base |
+| 2026-07-02 | Exclusao de cliente no app sera soft-delete via `ativo`, sem DELETE fisico | Preserva historico e segue a regra de entidades operacionais com `RESTRICT` |

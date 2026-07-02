@@ -5,38 +5,46 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
+  Edit3,
   LayoutDashboard,
   LogOut,
   MapPin,
   Menu,
   PackageSearch,
+  Power,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
+  UserRound,
   Wrench
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Atendimento,
   Bootstrap,
+  Cliente,
+  createSupabaseCliente,
   createSupabaseAtendimento,
   createSupabaseOrdem,
   getCurrentSession,
   hasSupabaseConfig,
   loadPerfil,
+  loadSupabaseClientes,
   loadSupabaseBootstrap,
   Ordem,
   PerfilUsuario,
   Session,
+  setSupabaseClienteAtivo,
   signInWithPassword,
   signOut,
   supabase,
+  updateSupabaseCliente,
   Unidade,
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -48,6 +56,7 @@ const initialData: Bootstrap = {
 
 const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard }> = [
   { page: "dashboard", label: "Painel", icon: LayoutDashboard },
+  { page: "clientes", label: "Clientes", icon: UserRound },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
@@ -100,6 +109,14 @@ export function App() {
   const [authReady, setAuthReady] = useState(!hasSupabaseConfig);
   const [session, setSession] = useState<Session | null>(null);
   const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+
+  const isGestor = perfil?.perfil === "gestor";
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => isGestor || (item.page !== "clientes" && item.page !== "relatorios")),
+    [isGestor]
+  );
 
   async function load() {
     setLoading(true);
@@ -123,6 +140,16 @@ export function App() {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar dados dinamicos.");
     }
     setLoading(false);
+  }
+
+  async function loadClientes() {
+    if (!hasSupabaseConfig || !isGestor) {
+      setClientes([]);
+      setSelectedCliente(null);
+      return;
+    }
+
+    setClientes(await loadSupabaseClientes());
   }
 
   useEffect(() => {
@@ -172,6 +199,16 @@ export function App() {
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar perfil."));
   }, [session?.user.id]);
 
+  useEffect(() => {
+    if (page === "clientes" && !isGestor) {
+      setPage("dashboard");
+    }
+  }, [isGestor, page]);
+
+  useEffect(() => {
+    loadClientes().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar clientes."));
+  }, [isGestor, session?.access_token]);
+
   const filteredOrdens = useMemo(() => {
     const text = query.toLowerCase();
     return data.ordens.filter((ordem) => {
@@ -183,6 +220,55 @@ export function App() {
         .includes(text);
     });
   }, [data.ordens, data.unidades, query]);
+
+  const filteredClientes = useMemo(() => {
+    const text = query.toLowerCase();
+    return clientes.filter((cliente) =>
+      [cliente.nome, cliente.documento, cliente.email, cliente.telefone, cliente.ativo ? "ativo" : "inativo"]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(text)
+    );
+  }, [clientes, query]);
+
+  async function submitCliente(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const payload = Object.fromEntries(form.entries());
+    setErrorMessage("");
+
+    try {
+      if (selectedCliente) {
+        await updateSupabaseCliente(selectedCliente.idCliente, payload);
+      } else {
+        await createSupabaseCliente(payload);
+      }
+      setSelectedCliente(null);
+      formElement.reset();
+      await loadClientes();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar cliente.");
+    }
+  }
+
+  async function toggleClienteAtivo(cliente: Cliente) {
+    const nextAtivo = !cliente.ativo;
+    const action = nextAtivo ? "reativar" : "inativar";
+    if (!window.confirm(`Confirmar ${action} cliente ${cliente.nome}?`)) return;
+
+    setErrorMessage("");
+    try {
+      await setSupabaseClienteAtivo(cliente.idCliente, nextAtivo);
+      if (selectedCliente?.idCliente === cliente.idCliente) {
+        setSelectedCliente({ ...cliente, ativo: nextAtivo });
+      }
+      await loadClientes();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do cliente.");
+    }
+  }
 
   async function createOrdem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -324,7 +410,7 @@ export function App() {
           </div>
         </div>
         <nav>
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <button key={item.page} className={page === item.page ? "active" : ""} onClick={() => { setPage(item.page); setMenuOpen(false); }}>
@@ -422,6 +508,68 @@ export function App() {
                 <OrdemForm unidades={data.unidades} onSubmit={createOrdem} />
               </section>
             </div>
+          </section>
+        )}
+
+        {page === "clientes" && isGestor && (
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading">
+                <h2>Clientes</h2>
+                <span>{filteredClientes.length} registros</span>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contato</th>
+                      <th>Status</th>
+                      <th>Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredClientes.map((cliente) => (
+                      <tr key={cliente.idCliente}>
+                        <td>
+                          <strong>{cliente.nome}</strong>
+                          <small>{cliente.documento || "Documento nao informado"}</small>
+                        </td>
+                        <td>
+                          {cliente.email || "Email nao informado"}
+                          <small>{cliente.telefone || "Telefone nao informado"}</small>
+                        </td>
+                        <td><StatusPill value={cliente.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td>
+                          <div className="row-actions">
+                            <button className="icon-button" title="Editar cliente" onClick={() => setSelectedCliente(cliente)}>
+                              <Edit3 size={16} />
+                            </button>
+                            <button className="icon-button" title={cliente.ativo ? "Inativar cliente" : "Reativar cliente"} onClick={() => toggleClienteAtivo(cliente)}>
+                              <Power size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!filteredClientes.length && (
+                      <tr>
+                        <td colSpan={4}>
+                          <span className="empty-state">Nenhum cliente encontrado.</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>{selectedCliente ? "Editar cliente" : "Novo cliente"}</h2>
+                {selectedCliente && <button onClick={() => setSelectedCliente(null)}>Novo</button>}
+              </div>
+              <ClienteForm cliente={selectedCliente} onSubmit={submitCliente} />
+            </section>
           </section>
         )}
 
@@ -713,6 +861,37 @@ function AtendimentoForm({ ordens, onSubmit }: { ordens: Ordem[]; onSubmit: (eve
       <button className="primary-button">
         <CheckCircle2 size={16} />
         Registrar
+      </button>
+    </form>
+  );
+}
+
+function ClienteForm({ cliente, onSubmit }: { cliente: Cliente | null; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form key={cliente?.idCliente || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">
+        Nome
+        <input name="nome" defaultValue={cliente?.nome || ""} required maxLength={160} />
+      </label>
+      <label className="wide">
+        Documento
+        <input name="documento" defaultValue={cliente?.documento || ""} maxLength={40} />
+      </label>
+      <label className="wide">
+        Email
+        <input name="email" type="email" defaultValue={cliente?.email || ""} maxLength={160} />
+      </label>
+      <label className="wide">
+        Telefone
+        <input name="telefone" defaultValue={cliente?.telefone || ""} maxLength={40} />
+      </label>
+      <label className="checkbox-field wide">
+        <input name="ativo" type="checkbox" defaultChecked={cliente?.ativo ?? true} />
+        <span>Ativo</span>
+      </label>
+      <button className="primary-button">
+        <CheckCircle2 size={16} />
+        {cliente ? "Salvar cliente" : "Criar cliente"}
       </button>
     </form>
   );

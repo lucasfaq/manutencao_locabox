@@ -36,6 +36,12 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - schema canonico da Fase 1 aplicado com cadastros base, OS, atendimentos, equipes, movimentacoes e relatorios;
   - triggers de status derivado, pendencias de atendimento e estoque por movimentacoes;
   - advisors de seguranca sem alertas de SQL/RLS, restando apenas configuracao de dashboard de senha vazada.
+- Fase 2 iniciada em 2026-07-02:
+  - CRUD de `clientes` implementado no frontend;
+  - menu de Clientes visivel apenas para gestor;
+  - criacao/edicao de cliente usando `public.clientes`;
+  - inativacao/reativacao por soft-delete via `ativo`;
+  - tecnico permanece bloqueado para escrita por RLS.
 
 ## Schema atual
 
@@ -109,10 +115,10 @@ Avaliacao: o prompt esta correto como direcao, mas deve ser aplicado de forma in
 
 ## Proximo passo recomendado
 
-Iniciar Fase 2 - Cadastros base, migrando o frontend para o schema canonico nesta ordem:
+Continuar Fase 2 - Cadastros base, migrando o frontend para o schema canonico nesta ordem:
 
-1. Clientes.
-2. Empresas.
+1. Clientes - concluido.
+2. Empresas - proximo.
 3. Contratos.
 4. Projetos.
 5. Unidades instaladas.
@@ -132,5 +138,5 @@ Leia apps/manutencao-web/docs/HANDOFF.md e retome o projeto manutencao_locabox a
 Se quiser continuar pela Fase 2:
 
 ```text
-Leia o handoff e implemente a Fase 2 de cadastros base, comecando por Clientes, usando o schema canonico e sem antecipar OS/Atendimentos.
+Leia o handoff e continue a Fase 2 de cadastros base, implementando Empresas, usando o schema canonico e sem antecipar Contratos.
 ```

@@ -54,6 +54,17 @@ export type PerfilUsuario = {
   ativo: boolean;
 };
 
+export type Cliente = {
+  idCliente: number;
+  nome: string;
+  documento: string;
+  email: string;
+  telefone: string;
+  ativo: boolean;
+  criadoEm: string;
+  atualizadoEm: string;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -173,6 +184,78 @@ export async function loadPerfil(): Promise<PerfilUsuario | null> {
     perfil: data.perfil,
     ativo: data.ativo
   };
+}
+
+function mapCliente(row: any): Cliente {
+  return {
+    idCliente: Number(row.id_cliente),
+    nome: row.nome,
+    documento: row.documento || "",
+    email: row.email || "",
+    telefone: row.telefone || "",
+    ativo: Boolean(row.ativo),
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em
+  };
+}
+
+export async function loadSupabaseClientes(): Promise<Cliente[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("clientes")
+    .select("id_cliente, nome, documento, email, telefone, ativo, criado_em, atualizado_em")
+    .order("ativo", { ascending: false })
+    .order("nome");
+
+  if (error) throw error;
+  return (data || []).map(mapCliente);
+}
+
+function clientePayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    nome: String(payload.nome || "").trim(),
+    documento: String(payload.documento || "").trim() || null,
+    email: String(payload.email || "").trim() || null,
+    telefone: String(payload.telefone || "").trim() || null,
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseCliente(payload: Record<string, FormDataEntryValue>): Promise<Cliente> {
+  const client = requireSupabase();
+  const row = clientePayload(payload);
+  const { data, error } = await client
+    .from("clientes")
+    .insert(row)
+    .select("id_cliente, nome, documento, email, telefone, ativo, criado_em, atualizado_em")
+    .single();
+
+  if (error) throw error;
+  return mapCliente(data);
+}
+
+export async function updateSupabaseCliente(idCliente: number, payload: Record<string, FormDataEntryValue>): Promise<Cliente> {
+  const client = requireSupabase();
+  const row = clientePayload(payload);
+  const { data, error } = await client
+    .from("clientes")
+    .update(row)
+    .eq("id_cliente", idCliente)
+    .select("id_cliente, nome, documento, email, telefone, ativo, criado_em, atualizado_em")
+    .single();
+
+  if (error) throw error;
+  return mapCliente(data);
+}
+
+export async function setSupabaseClienteAtivo(idCliente: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client
+    .from("clientes")
+    .update({ ativo })
+    .eq("id_cliente", idCliente);
+
+  if (error) throw error;
 }
 
 export async function loadSupabaseBootstrap(): Promise<Bootstrap> {
