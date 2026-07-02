@@ -48,7 +48,7 @@ export type EstoqueItem = {
 };
 
 export type PerfilUsuario = {
-  userId: string;
+  id: string;
   nome: string;
   perfil: "tecnico" | "gestor";
   ativo: boolean;
@@ -161,14 +161,14 @@ export async function loadPerfil(): Promise<PerfilUsuario | null> {
   const client = requireSupabase();
   const { data, error } = await client
     .from("perfis")
-    .select("user_id, nome, perfil, ativo")
+    .select("id, nome, perfil, ativo")
     .maybeSingle();
 
   if (error) throw error;
   if (!data) return null;
 
   return {
-    userId: data.user_id,
+    id: data.id,
     nome: data.nome,
     perfil: data.perfil,
     ativo: data.ativo

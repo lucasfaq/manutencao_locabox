@@ -56,6 +56,7 @@ Migrations:
 ```text
 supabase/migrations/20260701110000_initial_schema.sql
 supabase/migrations/20260702120000_auth_perfis_rls.sql
+supabase/migrations/20260702150000_core_schema_rules_rls.sql
 ```
 
 Seed:
@@ -71,8 +72,8 @@ Quando `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estiverem configurados, o 
 Perfis operacionais:
 
 ```text
-tecnico: leitura, criacao de OS, pendencias e atendimentos
-gestor: tecnico + manutencao futura de cadastros e estoque
+tecnico: leitura operacional, criacao de OS/atendimento e baixa via atendimento
+gestor: CRUD de cadastros, estoque, perfis, OS e relatorios
 ```
 
 Para promover um usuario a gestor:
@@ -80,8 +81,14 @@ Para promover um usuario a gestor:
 ```sql
 update public.perfis
 set perfil = 'gestor'
-where user_id = '<auth-user-id>';
+where id = '<auth-user-id>';
 ```
+
+### Schema canonico
+
+A Fase 1 canonica adiciona as tabelas do fluxo Contratos -> Projetos -> Unidades -> OS -> Atendimentos, com status por catalogo, triggers de status derivado, estoque por movimentacoes e RLS por perfil.
+
+As tabelas MVP antigas (`unidades`, `ordens`, `atendimentos`, `estoque`) permanecem temporariamente para compatibilidade do frontend atual. A Fase 2 deve migrar as telas de cadastros para as tabelas canonicas.
 
 ## GitHub
 

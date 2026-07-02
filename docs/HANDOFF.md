@@ -32,7 +32,10 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - schema `private` para funcoes auxiliares de RLS;
   - remocao das policies anonimas;
   - policies `authenticated` com usuario ativo em `perfis`;
-  - advisors de seguranca do Supabase sem alertas apos ajuste.
+  - usuario `lucasft@gmail.com` criado e promovido a `gestor`;
+  - schema canonico da Fase 1 aplicado com cadastros base, OS, atendimentos, equipes, movimentacoes e relatorios;
+  - triggers de status derivado, pendencias de atendimento e estoque por movimentacoes;
+  - advisors de seguranca sem alertas de SQL/RLS, restando apenas configuracao de dashboard de senha vazada.
 
 ## Schema atual
 
@@ -55,6 +58,19 @@ Migration de seguranca em `supabase/migrations/20260702120000_auth_perfis_rls.sq
 - funcoes privadas `has_active_profile()` e `is_gestor()`;
 - policies somente para `authenticated`;
 - bloqueio de `anon` nas tabelas e sequences publicas do app.
+
+Migration canonica em `supabase/migrations/20260702150000_core_schema_rules_rls.sql` com:
+
+- `clientes`, `empresas`, `contratos`, `projetos`, `unidades_instaladas`;
+- `colaboradores`, `terceirizados`, `equipes`;
+- `estoque_materiais`, `movimentacoes`, `movimentacoes_estoque`;
+- `pendencias_padrao`, `ordens_manutencao`, `pendencias_ordem_manutencao`;
+- `atendimentos_ordens`, `atendimentos_executados`;
+- catalogos `status_*` e `tipos_movimentacao`;
+- funcao `public.criar_ordem_manutencao(...)`;
+- view `public.vw_atendimentos_por_projeto` restrita a gestor.
+
+Observacao: as tabelas MVP antigas permanecem para compatibilidade do frontend atual. A Fase 2 deve migrar as telas para o schema canonico.
 
 ## Pontos validados
 
@@ -82,21 +98,28 @@ Avaliacao: o prompt esta correto como direcao, mas deve ser aplicado de forma in
 
 - Build local passou com `npm run build`.
 - SQL aplicado no Supabase remoto.
-- `anon` bloqueado para leitura de `public.ordens`.
-- Advisors de seguranca retornaram sem lints.
-- Advisors de performance mostram apenas indices ainda nao usados, esperado para uma base pequena.
-- `public.perfis` esta vazia porque ainda nao ha usuarios Auth cadastrados no projeto.
+- `anon` bloqueado para leitura das tabelas operacionais.
+- Login REST e leitura de `public.perfis(id, perfil, ativo)` validados para `lucasft@gmail.com`.
+- Fluxo canonico testado em transacao com rollback: gestor cria cadastros, OS com pendencia, atendimento carrega pendencia automaticamente.
+- Contrato inativo bloqueia criacao de OS por trigger.
+- Tecnico nao consegue criar cadastro base por RLS.
+- Build local passou com `npm run build`.
+- Security advisor mostra apenas `auth_leaked_password_protection`, que exige ajuste manual no dashboard do Supabase Auth.
+- Performance advisor mostra indices nao usados em base pequena; FKs obrigatorias do prompt foram indexadas.
 
 ## Proximo passo recomendado
 
-Concluir a Fase 1 real de seguranca com usuarios reais:
+Iniciar Fase 2 - Cadastros base, migrando o frontend para o schema canonico nesta ordem:
 
-1. Criar ao menos um usuario no Supabase Auth.
-2. Promover um usuario gestor via SQL, se necessario.
-3. Testar login no GitHub Pages.
-4. Testar criacao de OS com usuario tecnico.
-5. Testar permissoes de gestor.
-6. Depois expandir schema para contratos, projetos, colaboradores, equipes e movimentacoes.
+1. Clientes.
+2. Empresas.
+3. Contratos.
+4. Projetos.
+5. Unidades instaladas.
+6. Colaboradores e terceirizados.
+7. Equipes.
+8. Materiais/estoque.
+9. Catalogo de pendencias.
 
 ## Como retomar no Codex
 
@@ -106,8 +129,8 @@ Ao iniciar uma nova sessao, pedir:
 Leia apps/manutencao-web/docs/HANDOFF.md e retome o projeto manutencao_locabox a partir do proximo passo recomendado.
 ```
 
-Se quiser continuar pela seguranca:
+Se quiser continuar pela Fase 2:
 
 ```text
-Leia o handoff e conclua a Fase 1 real: crie/teste usuarios Supabase Auth, promova um gestor, valide RLS com tecnico/gestor e publique o build.
+Leia o handoff e implemente a Fase 2 de cadastros base, comecando por Clientes, usando o schema canonico e sem antecipar OS/Atendimentos.
 ```
