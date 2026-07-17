@@ -55,6 +55,7 @@ import {
   loadEstoquePlanejamento,
   loadHistoricoUnidade,
   loadMapaUnidades,
+  loadPendenciasPadrao,
   loadSupabaseMateriais,
   loadSupabaseClientes,
   loadSupabaseColaboradores,
@@ -70,6 +71,7 @@ import {
   HistoricoUnidadeEvento,
   MapaUnidade,
   MaterialEstoque,
+  PendenciaPadrao,
   PerfilUsuario,
   Projeto,
   Session,
@@ -200,6 +202,7 @@ export function App() {
   const [selectedTerceirizado, setSelectedTerceirizado] = useState<Terceirizado | null>(null);
   const [usuarios, setUsuarios] = useState<AdminUser[]>([]);
   const [selectedUsuario, setSelectedUsuario] = useState<AdminUser | null>(null);
+  const [pendenciasPadrao, setPendenciasPadrao] = useState<PendenciaPadrao[]>([]);
   const [materiais, setMateriais] = useState<MaterialEstoque[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<MaterialEstoque | null>(null);
   const [estoqueConfiguracao, setEstoqueConfiguracao] = useState<EstoqueConfiguracao | null>(null);
@@ -332,6 +335,14 @@ export function App() {
     setEstoquePlanejamento(nextPlanejamento);
   }
 
+  async function loadPendencias() {
+    if (!hasSupabaseConfig || !session) {
+      setPendenciasPadrao([]);
+      return;
+    }
+    setPendenciasPadrao(await loadPendenciasPadrao());
+  }
+
   useEffect(() => {
     if (!hasSupabaseConfig) {
       setAuthReady(true);
@@ -392,6 +403,7 @@ export function App() {
     loadProjetos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar projetos."));
     loadUnidadesInstaladas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar unidades instaladas."));
     loadPessoas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar pessoas."));
+    loadPendencias().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar pendencias padrao."));
     loadMateriais().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar materiais."));
   }, [isGestor, session?.access_token]);
 
@@ -854,6 +866,7 @@ export function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
+    payload.pendenciasIds = form.getAll("pendenciasIds").map(String).join(",");
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
@@ -887,10 +900,10 @@ export function App() {
         prazoSla: String(payload.prazoSla),
         responsavel: String(payload.responsavel || "A definir"),
         descricao: String(payload.descricao || ""),
-        pendencias: String(payload.pendencias || "")
-          .split("\n")
-          .map((item) => item.trim())
-          .filter(Boolean)
+        pendencias: String(payload.pendenciasIds || "")
+          .split(",")
+          .map((item) => pendenciasPadrao.find((pendencia) => pendencia.idPendencia === Number(item))?.descricao)
+          .filter(Boolean) as string[]
       };
       setData((current) => withMetrics({ ...current, ordens: [ordem, ...current.ordens] }));
       formElement.reset();
@@ -1084,7 +1097,7 @@ export function App() {
                 <div className="panel-heading">
                   <h2>Nova OS</h2>
                 </div>
-                <OrdemForm unidades={data.unidades} onSubmit={createOrdem} />
+                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao} onSubmit={createOrdem} />
               </section>
             </div>
           </section>
@@ -1905,7 +1918,15 @@ function AuthScreen({
   );
 }
 
-function OrdemForm({ unidades, onSubmit }: { unidades: Unidade[]; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function OrdemForm({
+  unidades,
+  pendenciasPadrao,
+  onSubmit
+}: {
+  unidades: Unidade[];
+  pendenciasPadrao: PendenciaPadrao[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
     <form className="form-grid" onSubmit={onSubmit}>
       <label>
@@ -1943,10 +1964,18 @@ function OrdemForm({ unidades, onSubmit }: { unidades: Unidade[]; onSubmit: (eve
         Descricao
         <textarea name="descricao" placeholder="Resumo da solicitacao" rows={3} />
       </label>
-      <label className="wide">
-        Pendencias
-        <textarea name="pendencias" placeholder="Uma pendencia por linha" rows={3} />
-      </label>
+      <fieldset className="standard-pending-field wide">
+        <legend>Pendencias</legend>
+        <div>
+          {pendenciasPadrao.map((pendencia) => (
+            <label key={pendencia.idPendencia}>
+              <input name="pendenciasIds" type="checkbox" value={pendencia.idPendencia} />
+              <span>{pendencia.descricao}</span>
+            </label>
+          ))}
+          {!pendenciasPadrao.length && <span className="empty-state">Nenhuma pendencia padrao cadastrada.</span>}
+        </div>
+      </fieldset>
       <button className="primary-button">
         <Plus size={16} />
         Criar OS

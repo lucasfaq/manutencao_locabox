@@ -54,6 +54,13 @@ export type PerfilUsuario = {
   ativo: boolean;
 };
 
+export type PendenciaPadrao = {
+  idPendencia: number;
+  codigo: string;
+  descricao: string;
+  ativo: boolean;
+};
+
 export type Cliente = {
   idCliente: number;
   nome: string;
@@ -702,6 +709,22 @@ export async function loadStatusUnidades(): Promise<StatusCatalogo[]> {
   return data || [];
 }
 
+export async function loadPendenciasPadrao(): Promise<PendenciaPadrao[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("pendencias_padrao")
+    .select("id_pendencia, codigo, descricao, ativo")
+    .eq("ativo", true)
+    .order("descricao");
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    idPendencia: Number(row.id_pendencia),
+    codigo: row.codigo || "",
+    descricao: row.descricao,
+    ativo: Boolean(row.ativo)
+  }));
+}
+
 function unidadeInstaladaPayload(payload: Record<string, FormDataEntryValue>) {
   const latitude = String(payload.latitude || "").trim();
   const longitude = String(payload.longitude || "").trim();
@@ -1140,7 +1163,14 @@ export async function createSupabaseOrdem(payload: Record<string, FormDataEntryV
   const { data, error } = await client.from("ordens").insert(row).select("*").single();
   if (error) throw error;
 
-  const pendencias = parseLines(payload.pendencias);
+  const pendenciasIds = String(payload.pendenciasIds || "")
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isInteger(item) && item > 0);
+  const pendencias = pendenciasIds.length
+    ? await loadPendenciasPadrao().then((items) => items.filter((item) => pendenciasIds.includes(item.idPendencia)).map((item) => item.descricao))
+    : [];
+
   if (pendencias.length) {
     const { error: pendenciaError } = await client.from("pendencias_ordem").insert(
       pendencias.map((descricao) => ({ ordem_id: data.id, descricao }))
