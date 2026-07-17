@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   Building2,
   Boxes,
@@ -9,6 +10,7 @@ import {
   Edit3,
   LayoutDashboard,
   LogOut,
+  MapPinned,
   MapPin,
   Menu,
   PackageSearch,
@@ -20,7 +22,9 @@ import {
   UserRound,
   Wrench
 } from "lucide-react";
+import L, { LatLngBoundsExpression } from "leaflet";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import {
   AdminUser,
   Atendimento,
@@ -49,6 +53,8 @@ import {
   loadAdminUsers,
   loadEstoqueConfiguracao,
   loadEstoquePlanejamento,
+  loadHistoricoUnidade,
+  loadMapaUnidades,
   loadSupabaseMateriais,
   loadSupabaseClientes,
   loadSupabaseColaboradores,
@@ -61,6 +67,8 @@ import {
   loadStatusContratos,
   loadStatusUnidades,
   Ordem,
+  HistoricoUnidadeEvento,
+  MapaUnidade,
   MaterialEstoque,
   PerfilUsuario,
   Projeto,
@@ -78,6 +86,7 @@ import {
   signInWithPassword,
   signOut,
   supabase,
+  resolveGoogleMapsLink,
   updateAdminUser,
   updateEstoqueConfiguracao,
   updateSupabaseMaterial,
@@ -94,7 +103,7 @@ import {
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "ordens" | "unidades" | "mapa" | "historico_unidade" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -114,6 +123,7 @@ const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard 
   { page: "usuarios", label: "Usuarios", icon: ShieldCheck },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
+  { page: "mapa", label: "Mapa das Unidades", icon: MapPinned },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
   { page: "estoque", label: "Estoque", icon: Boxes },
   { page: "relatorios", label: "Relatorios", icon: BarChart3 }
@@ -174,6 +184,10 @@ export function App() {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [selectedProjeto, setSelectedProjeto] = useState<Projeto | null>(null);
   const [unidadesInstaladas, setUnidadesInstaladas] = useState<UnidadeInstalada[]>([]);
+  const [mapaUnidades, setMapaUnidades] = useState<MapaUnidade[]>([]);
+  const [selectedMapaUnidade, setSelectedMapaUnidade] = useState<MapaUnidade | null>(null);
+  const [historicoUnidade, setHistoricoUnidade] = useState<HistoricoUnidadeEvento[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [statusUnidades, setStatusUnidades] = useState<StatusCatalogo[]>([]);
   const [selectedUnidadeInstalada, setSelectedUnidadeInstalada] = useState<UnidadeInstalada | null>(null);
   const [unitEstadoFilter, setUnitEstadoFilter] = useState("");
@@ -196,6 +210,7 @@ export function App() {
     () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "usuarios", "relatorios"].includes(item.page))),
     [isGestor]
   );
+  const pageTitle = page === "historico_unidade" ? "Historico da Unidade" : navItems.find((item) => item.page === page)?.label;
 
   async function load() {
     setLoading(true);
@@ -266,13 +281,15 @@ export function App() {
   async function loadUnidadesInstaladas() {
     if (!hasSupabaseConfig || !session) {
       setUnidadesInstaladas([]);
+      setMapaUnidades([]);
       setStatusUnidades([]);
       setSelectedUnidadeInstalada(null);
       return;
     }
-    const [nextUnidades, nextStatus] = await Promise.all([loadSupabaseUnidadesInstaladas(), loadStatusUnidades()]);
+    const [nextUnidades, nextStatus, nextMapa] = await Promise.all([loadSupabaseUnidadesInstaladas(), loadStatusUnidades(), loadMapaUnidades()]);
     setUnidadesInstaladas(nextUnidades);
     setStatusUnidades(nextStatus);
+    setMapaUnidades(nextMapa);
   }
 
   async function loadPessoas() {
@@ -463,6 +480,21 @@ export function App() {
     };
   }, [unidadesInstaladas, unitEstadoFilter, unitCidadeFilter, unitBairroFilter]);
 
+  const filteredMapaUnidades = useMemo(() => {
+    const text = query.toLowerCase();
+    return mapaUnidades.filter((unidade) => {
+      const matchesText = [
+        unidade.codigo, unidade.nome, unidade.projetoNome, unidade.contratoNumero, unidade.estado, unidade.cidade,
+        unidade.bairro, unidade.rua, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"
+      ].join(" ").toLowerCase().includes(text);
+      return matchesText
+        && (!unitEstadoFilter || unidade.estado === unitEstadoFilter)
+        && (!unitCidadeFilter || unidade.cidade === unitCidadeFilter)
+        && (!unitBairroFilter || unidade.bairro === unitBairroFilter)
+        && (!unitRuaFilter || unidade.rua === unitRuaFilter);
+    });
+  }, [mapaUnidades, query, unitEstadoFilter, unitCidadeFilter, unitBairroFilter, unitRuaFilter]);
+
   const filteredColaboradores = useMemo(() => {
     const text = query.toLowerCase();
     return colaboradores.filter((item) => [item.nome, item.cargo, item.email, item.telefone].join(" ").toLowerCase().includes(text));
@@ -635,6 +667,21 @@ export function App() {
     const payload = Object.fromEntries(new FormData(formElement).entries());
     setErrorMessage("");
     try {
+      const googleMapsUrl = String(payload.googleMapsUrl || "").trim();
+      if (googleMapsUrl) {
+        const currentUrl = selectedUnidadeInstalada?.googleMapsUrl || "";
+        const hasCoordinates = String(payload.latitude || "") && String(payload.longitude || "");
+        if (!hasCoordinates || googleMapsUrl !== currentUrl) {
+          const coordinates = await resolveGoogleMapsLink(googleMapsUrl);
+          payload.latitude = String(coordinates.latitude);
+          payload.longitude = String(coordinates.longitude);
+          payload.googleMapsUrl = coordinates.resolvedUrl;
+        }
+      } else {
+        payload.latitude = "";
+        payload.longitude = "";
+      }
+
       if (selectedUnidadeInstalada) await updateSupabaseUnidadeInstalada(selectedUnidadeInstalada.idUnidade, payload);
       else await createSupabaseUnidadeInstalada(payload);
       setSelectedUnidadeInstalada(null);
@@ -642,6 +689,21 @@ export function App() {
       await loadUnidadesInstaladas();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar unidade instalada.");
+    }
+  }
+
+  async function openHistoricoUnidade(unidade: MapaUnidade) {
+    setSelectedMapaUnidade(unidade);
+    setHistoricoUnidade([]);
+    setHistoryLoading(true);
+    setPage("historico_unidade");
+    setErrorMessage("");
+    try {
+      setHistoricoUnidade(await loadHistoricoUnidade(unidade.idUnidade));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar historico da unidade.");
+    } finally {
+      setHistoryLoading(false);
     }
   }
 
@@ -950,7 +1012,7 @@ export function App() {
             <Menu size={20} />
           </button>
           <div>
-            <h1>{navItems.find((item) => item.page === page)?.label}</h1>
+            <h1>{pageTitle}</h1>
             <p>Controle operacional dinamico de OS, unidades, atendimentos e estoque.</p>
           </div>
           <div className="topbar-actions">
@@ -1427,6 +1489,70 @@ export function App() {
           </section>
         )}
 
+        {page === "mapa" && (
+          <section className="map-page">
+            <section className="panel full">
+              <div className="panel-heading">
+                <h2>Mapa das unidades</h2>
+                <span>{filteredMapaUnidades.filter((unidade) => unidade.latitude != null && unidade.longitude != null).length} no mapa</span>
+              </div>
+              <div className="unit-filters">
+                <label>Estado
+                  <select value={unitEstadoFilter} onChange={(event) => {
+                    setUnitEstadoFilter(event.target.value); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
+                  }}>
+                    <option value="">Todos</option>
+                    {unitFilterOptions.estados.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Cidade
+                  <select value={unitCidadeFilter} onChange={(event) => {
+                    setUnitCidadeFilter(event.target.value); setUnitBairroFilter(""); setUnitRuaFilter("");
+                  }}>
+                    <option value="">Todas</option>
+                    {unitFilterOptions.cidades.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Bairro
+                  <select value={unitBairroFilter} onChange={(event) => {
+                    setUnitBairroFilter(event.target.value); setUnitRuaFilter("");
+                  }}>
+                    <option value="">Todos</option>
+                    {unitFilterOptions.bairros.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Rua
+                  <select value={unitRuaFilter} onChange={(event) => setUnitRuaFilter(event.target.value)}>
+                    <option value="">Todas</option>
+                    {unitFilterOptions.ruas.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="clear-filters-button"
+                  disabled={!unitEstadoFilter && !unitCidadeFilter && !unitBairroFilter && !unitRuaFilter}
+                  onClick={() => {
+                    setUnitEstadoFilter(""); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
+                  }}
+                >
+                  <RefreshCw size={15} />
+                  Limpar filtros
+                </button>
+              </div>
+              <UnidadesMap unidades={filteredMapaUnidades} onOpenHistory={openHistoricoUnidade} />
+            </section>
+          </section>
+        )}
+
+        {page === "historico_unidade" && (
+          <HistoricoUnidadePage
+            unidade={selectedMapaUnidade}
+            eventos={historicoUnidade}
+            loading={historyLoading}
+            onBack={() => setPage("mapa")}
+          />
+        )}
+
         {page === "atendimentos" && (
           <section className="two-columns">
             <section className="panel">
@@ -1533,6 +1659,176 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "Sem registro";
+  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function unitMarkerIcon(unidade: MapaUnidade) {
+  const tone = !unidade.ativo ? "inactive" : unidade.statusCodigo.includes("manut") ? "warn" : "ok";
+  return L.divIcon({
+    className: `unit-marker ${tone}`,
+    html: `<span></span>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
+  });
+}
+
+function MapAutoBounds({ unidades }: { unidades: MapaUnidade[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const positions = unidades
+      .filter((unidade) => unidade.latitude != null && unidade.longitude != null)
+      .map((unidade) => [unidade.latitude as number, unidade.longitude as number] as [number, number]);
+
+    if (!positions.length) return;
+    if (positions.length === 1) {
+      map.setView(positions[0], 14);
+      return;
+    }
+
+    map.fitBounds(positions as LatLngBoundsExpression, { padding: [42, 42], maxZoom: 15 });
+  }, [map, unidades]);
+
+  return null;
+}
+
+function UnidadesMap({
+  unidades,
+  onOpenHistory
+}: {
+  unidades: MapaUnidade[];
+  onOpenHistory: (unidade: MapaUnidade) => void;
+}) {
+  const located = unidades.filter((unidade) => unidade.latitude != null && unidade.longitude != null);
+  const unlocated = unidades.filter((unidade) => unidade.latitude == null || unidade.longitude == null);
+
+  return (
+    <div className="map-layout">
+      <div className="map-shell">
+        {located.length ? (
+          <MapContainer center={[-5.2, -39.5]} zoom={7} scrollWheelZoom className="units-map">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <MapAutoBounds unidades={located} />
+            {located.map((unidade) => (
+              <Marker
+                key={unidade.idUnidade}
+                position={[unidade.latitude as number, unidade.longitude as number]}
+                icon={unitMarkerIcon(unidade)}
+                eventHandlers={{ click: () => onOpenHistory(unidade) }}
+              >
+                <Tooltip direction="top" offset={[0, -12]} opacity={1}>
+                  <div className="map-tooltip">
+                    <strong>{unidade.nome}</strong>
+                    <span>Contrato: {unidade.contratoNumero || "Nao informado"}</span>
+                    <span>Projeto: {unidade.projetoNome || "Nao informado"}</span>
+                    <span>Status: {unidade.ativo ? unidade.statusCodigo : "Inativo"}</span>
+                    <span>Ultima manutencao: {formatDateTime(unidade.ultimaManutencao)}</span>
+                  </div>
+                </Tooltip>
+              </Marker>
+            ))}
+          </MapContainer>
+        ) : (
+          <div className="map-empty-state">
+            <MapPinned size={28} />
+            <strong>Nenhuma unidade com coordenadas</strong>
+            <span>Cadastre um link valido do Google Maps na unidade para gerar o pin.</span>
+          </div>
+        )}
+      </div>
+      <aside className="map-side-panel">
+        <article>
+          <span>Unidades filtradas</span>
+          <strong>{unidades.length}</strong>
+        </article>
+        <article>
+          <span>Com pin</span>
+          <strong>{located.length}</strong>
+        </article>
+        <article>
+          <span>Sem coordenadas</span>
+          <strong>{unlocated.length}</strong>
+        </article>
+        <div className="unlocated-list">
+          <h3>Sem pin no mapa</h3>
+          {unlocated.slice(0, 8).map((unidade) => (
+            <div key={unidade.idUnidade}>
+              <strong>{unidade.nome}</strong>
+              <small>{[unidade.cidade, unidade.estado].filter(Boolean).join(" / ") || "Localizacao nao informada"}</small>
+            </div>
+          ))}
+          {!unlocated.length && <span className="empty-state">Todas as unidades filtradas possuem coordenadas.</span>}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function HistoricoUnidadePage({
+  unidade,
+  eventos,
+  loading,
+  onBack
+}: {
+  unidade: MapaUnidade | null;
+  eventos: HistoricoUnidadeEvento[];
+  loading: boolean;
+  onBack: () => void;
+}) {
+  if (!unidade) {
+    return (
+      <section className="panel full">
+        <div className="panel-heading">
+          <h2>Historico da unidade</h2>
+          <button onClick={onBack}><ArrowLeft size={16} />Voltar</button>
+        </div>
+        <span className="empty-state">Selecione uma unidade no mapa.</span>
+      </section>
+    );
+  }
+
+  return (
+    <section className="history-page">
+      <section className="panel full">
+        <div className="panel-heading">
+          <div>
+            <h2>{unidade.nome}</h2>
+            <span>{unidade.codigo} · {unidade.projetoNome} · Contrato {unidade.contratoNumero || "nao informado"}</span>
+          </div>
+          <button onClick={onBack}><ArrowLeft size={16} />Voltar ao mapa</button>
+        </div>
+        <div className="history-summary">
+          <article><span>Status</span><strong>{unidade.ativo ? unidade.statusCodigo : "Inativo"}</strong></article>
+          <article><span>Ultima manutencao</span><strong>{formatDateTime(unidade.ultimaManutencao)}</strong></article>
+          <article><span>Localizacao</span><strong>{[unidade.rua, unidade.bairro, unidade.cidade, unidade.estado].filter(Boolean).join(" · ") || "Nao informada"}</strong></article>
+          {unidade.googleMapsUrl && <a className="map-link" href={unidade.googleMapsUrl} target="_blank" rel="noreferrer">Abrir Google Maps</a>}
+        </div>
+      </section>
+      <section className="panel full">
+        <div className="panel-heading"><h2>Linha do tempo</h2><span>{eventos.length} eventos</span></div>
+        <div className="history-timeline">
+          {loading && <span className="empty-state">Carregando historico.</span>}
+          {!loading && eventos.map((evento) => (
+            <article key={evento.idEvento}>
+              <div className={`history-dot ${evento.tipoEvento}`}></div>
+              <div>
+                <strong>{evento.titulo}</strong>
+                <span>{formatDateTime(evento.dataEvento)} · {evento.tipoEvento}{evento.statusCodigo ? ` · ${evento.statusCodigo}` : ""}</span>
+                {evento.descricao && <p>{evento.descricao}</p>}
+              </div>
+            </article>
+          ))}
+          {!loading && !eventos.length && <span className="empty-state">Nenhum evento historico encontrado para esta unidade.</span>}
+        </div>
+      </section>
+    </section>
   );
 }
 
@@ -1838,6 +2134,8 @@ function UnidadeInstaladaForm({ unidade, projetos, status, onSubmit }: {
       <label>Bairro<input name="bairro" defaultValue={unidade?.bairro || ""} required maxLength={120} /></label>
       <label>Rua<input name="rua" defaultValue={unidade?.rua || ""} required maxLength={180} /></label>
       <label className="wide">Link do Google Maps<input name="googleMapsUrl" type="url" defaultValue={unidade?.googleMapsUrl || ""} placeholder="https://maps.google.com/..." maxLength={500} /></label>
+      <input type="hidden" name="latitude" defaultValue={unidade?.latitude ?? ""} />
+      <input type="hidden" name="longitude" defaultValue={unidade?.longitude ?? ""} />
       <label className="wide">
         Projeto
         <select name="idProjeto" defaultValue={unidade?.idProjeto || ""} required>
@@ -1853,6 +2151,7 @@ function UnidadeInstaladaForm({ unidade, projetos, status, onSubmit }: {
       </label>
       <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={unidade?.ativo ?? true} /><span>Ativa</span></label>
       <button className="primary-button"><CheckCircle2 size={16} />{unidade ? "Salvar unidade" : "Criar unidade"}</button>
+      {unidade?.latitude != null && unidade?.longitude != null && <small className="wide">Coordenadas salvas: {unidade.latitude}, {unidade.longitude}</small>}
     </form>
   );
 }

@@ -116,8 +116,39 @@ export type UnidadeInstalada = {
   bairro: string;
   rua: string;
   googleMapsUrl: string;
+  latitude: number | null;
+  longitude: number | null;
   statusCodigo: string;
   ativo: boolean;
+};
+
+export type MapaUnidade = {
+  idUnidade: number;
+  codigo: string;
+  nome: string;
+  estado: string;
+  cidade: string;
+  bairro: string;
+  rua: string;
+  googleMapsUrl: string;
+  latitude: number | null;
+  longitude: number | null;
+  statusCodigo: string;
+  ativo: boolean;
+  projetoNome: string;
+  contratoNumero: string;
+  ultimaManutencao: string | null;
+};
+
+export type HistoricoUnidadeEvento = {
+  idEvento: string;
+  idUnidade: number;
+  dataEvento: string;
+  tipoEvento: "registro" | "ordem" | "atendimento";
+  titulo: string;
+  descricao: string;
+  statusCodigo: string | null;
+  protocolo: string | null;
 };
 
 export type Colaborador = {
@@ -599,7 +630,7 @@ export async function setSupabaseProjetoAtivo(idProjeto: number, ativo: boolean)
   if (error) throw error;
 }
 
-const unidadeInstaladaFields = "id_unidade, id_projeto, codigo, nome, estado, cidade, bairro, rua, google_maps_url, status_codigo, ativo, projetos(nome)";
+const unidadeInstaladaFields = "id_unidade, id_projeto, codigo, nome, estado, cidade, bairro, rua, google_maps_url, latitude, longitude, status_codigo, ativo, projetos(nome)";
 
 function mapUnidadeInstalada(row: any): UnidadeInstalada {
   return {
@@ -613,8 +644,43 @@ function mapUnidadeInstalada(row: any): UnidadeInstalada {
     bairro: row.bairro || "",
     rua: row.rua || "",
     googleMapsUrl: row.google_maps_url || "",
+    latitude: row.latitude == null ? null : Number(row.latitude),
+    longitude: row.longitude == null ? null : Number(row.longitude),
     statusCodigo: row.status_codigo,
     ativo: Boolean(row.ativo)
+  };
+}
+
+function mapMapaUnidade(row: any): MapaUnidade {
+  return {
+    idUnidade: Number(row.id_unidade),
+    codigo: row.codigo || "",
+    nome: row.nome || "",
+    estado: row.estado || "",
+    cidade: row.cidade || "",
+    bairro: row.bairro || "",
+    rua: row.rua || "",
+    googleMapsUrl: row.google_maps_url || "",
+    latitude: row.latitude == null ? null : Number(row.latitude),
+    longitude: row.longitude == null ? null : Number(row.longitude),
+    statusCodigo: row.status_codigo || "",
+    ativo: Boolean(row.ativo),
+    projetoNome: row.projeto_nome || "",
+    contratoNumero: row.numero_contrato || "",
+    ultimaManutencao: row.ultima_manutencao || null
+  };
+}
+
+function mapHistoricoUnidadeEvento(row: any): HistoricoUnidadeEvento {
+  return {
+    idEvento: row.id_evento,
+    idUnidade: Number(row.id_unidade),
+    dataEvento: row.data_evento,
+    tipoEvento: row.tipo_evento,
+    titulo: row.titulo || "",
+    descricao: row.descricao || "",
+    statusCodigo: row.status_codigo || null,
+    protocolo: row.protocolo || null
   };
 }
 
@@ -637,6 +703,8 @@ export async function loadStatusUnidades(): Promise<StatusCatalogo[]> {
 }
 
 function unidadeInstaladaPayload(payload: Record<string, FormDataEntryValue>) {
+  const latitude = String(payload.latitude || "").trim();
+  const longitude = String(payload.longitude || "").trim();
   return {
     id_projeto: Number(payload.idProjeto),
     codigo: String(payload.codigo || "").trim(),
@@ -646,9 +714,46 @@ function unidadeInstaladaPayload(payload: Record<string, FormDataEntryValue>) {
     bairro: String(payload.bairro || "").trim(),
     rua: String(payload.rua || "").trim(),
     google_maps_url: String(payload.googleMapsUrl || "").trim(),
+    latitude: latitude ? Number(latitude) : null,
+    longitude: longitude ? Number(longitude) : null,
+    coordenadas_atualizadas_em: latitude && longitude ? new Date().toISOString() : null,
     status_codigo: String(payload.statusCodigo || "instalada"),
     ativo: payload.ativo === "on"
   };
+}
+
+export async function resolveGoogleMapsLink(url: string): Promise<{ latitude: number; longitude: number; resolvedUrl: string }> {
+  const client = requireSupabase();
+  const { data, error } = await client.functions.invoke("resolve-map-link", { body: { url } });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return {
+    latitude: Number(data.latitude),
+    longitude: Number(data.longitude),
+    resolvedUrl: String(data.resolvedUrl || url)
+  };
+}
+
+export async function loadMapaUnidades(): Promise<MapaUnidade[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("vw_mapa_unidades")
+    .select("*")
+    .order("ativo", { ascending: false })
+    .order("nome");
+  if (error) throw error;
+  return (data || []).map(mapMapaUnidade);
+}
+
+export async function loadHistoricoUnidade(idUnidade: number): Promise<HistoricoUnidadeEvento[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("vw_historico_unidades")
+    .select("*")
+    .eq("id_unidade", idUnidade)
+    .order("data_evento", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapHistoricoUnidadeEvento);
 }
 
 export async function createSupabaseUnidadeInstalada(payload: Record<string, FormDataEntryValue>): Promise<UnidadeInstalada> {
