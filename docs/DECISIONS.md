@@ -27,3 +27,10 @@
 | 2026-07-17 | Senhas nunca sao exibidas; gestor define senha temporaria e cada usuario pode trocar a propria senha | Supabase armazena credenciais de forma nao recuperavel e a interface deve evitar exposicao de segredo |
 | 2026-07-17 | Equipes sera implementada dentro do atendimento canonico, nao como cadastro isolado | A tabela `equipes` exige `id_atendimento` e representa membros alocados em cada atendimento |
 | 2026-07-17 | Saldo de material e somente leitura no cadastro e sera alterado por movimentacoes | Preserva rastreabilidade e respeita as triggers de estoque do schema canonico |
+# Planejamento de estoque baseado em movimentacoes
+
+- Data: 2026-07-17
+- Decisao: usar as saidas canonicas de `movimentacoes_estoque` como fonte da demanda e manter a sugestao de compra sujeita a aprovacao humana.
+- Calculo: estoque-alvo = estoque de seguranca + demanda media x (lead time + periodo de revisao).
+- Motivo: corrigir a inconsistencia dimensional da formula de estoque maximo da planilha e evitar compras duplicadas ou saldos manuais sem rastreabilidade.
+- Seguranca: configuracoes e materiais sao alterados apenas por gestores; usuarios ativos podem consultar indicadores.

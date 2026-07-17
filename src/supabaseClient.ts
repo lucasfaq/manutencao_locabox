@@ -163,7 +163,48 @@ export type MaterialEstoque = {
   unidadeMedida: string;
   estoqueMinimo: number;
   estoqueAtual: number;
+  nivelServico: number | null;
+  janelaHistoricaDias: number | null;
+  leadTimeDias: number | null;
+  desvioLeadTimeDias: number | null;
+  periodoRevisaoDias: number | null;
+  loteMinimo: number;
+  multiploCompra: number;
+  critico: boolean;
   ativo: boolean;
+};
+
+export type EstoqueConfiguracao = {
+  nivelServico: number;
+  janelaHistoricaDias: number;
+  leadTimeDias: number;
+  desvioLeadTimeDias: number;
+  periodoRevisaoDias: number;
+  minimoObservacoes: number;
+};
+
+export type EstoquePlanejamento = {
+  idMaterial: number;
+  codigo: string;
+  descricao: string;
+  categoria: string;
+  unidadeMedida: string;
+  estoqueAtual: number;
+  critico: boolean;
+  nivelServico: number;
+  fatorServico: number;
+  janelaHistoricaDias: number;
+  leadTimeDias: number;
+  diasComConsumo: number;
+  consumoPeriodo: number;
+  demandaMedia: number;
+  desvioDemanda: number;
+  estoqueSeguranca: number;
+  pontoRessuprimento: number;
+  estoqueAlvo: number;
+  coberturaDias: number | null;
+  sugestaoCompra: number;
+  situacao: "sem_historico" | "ruptura" | "comprar" | "atencao" | "normal";
 };
 
 export type Bootstrap = {
@@ -790,7 +831,7 @@ export async function updateOwnPassword(password: string): Promise<void> {
   if (error) throw error;
 }
 
-const materialFields = "id_material, codigo, descricao, categoria, unidade_medida, estoque_minimo, estoque_atual, ativo";
+const materialFields = "id_material, codigo, descricao, categoria, unidade_medida, estoque_minimo, estoque_atual, nivel_servico, janela_historica_dias, lead_time_dias, desvio_lead_time_dias, periodo_revisao_dias, lote_minimo, multiplo_compra, critico, ativo";
 
 function mapMaterial(row: any): MaterialEstoque {
   return {
@@ -801,6 +842,14 @@ function mapMaterial(row: any): MaterialEstoque {
     unidadeMedida: row.unidade_medida,
     estoqueMinimo: Number(row.estoque_minimo),
     estoqueAtual: Number(row.estoque_atual),
+    nivelServico: row.nivel_servico == null ? null : Number(row.nivel_servico),
+    janelaHistoricaDias: row.janela_historica_dias == null ? null : Number(row.janela_historica_dias),
+    leadTimeDias: row.lead_time_dias == null ? null : Number(row.lead_time_dias),
+    desvioLeadTimeDias: row.desvio_lead_time_dias == null ? null : Number(row.desvio_lead_time_dias),
+    periodoRevisaoDias: row.periodo_revisao_dias == null ? null : Number(row.periodo_revisao_dias),
+    loteMinimo: Number(row.lote_minimo),
+    multiploCompra: Number(row.multiplo_compra),
+    critico: Boolean(row.critico),
     ativo: Boolean(row.ativo)
   };
 }
@@ -819,6 +868,14 @@ function materialPayload(payload: Record<string, FormDataEntryValue>) {
     categoria: String(payload.categoria || "").trim(),
     unidade_medida: String(payload.unidadeMedida || "un").trim(),
     estoque_minimo: Number(payload.estoqueMinimo || 0),
+    nivel_servico: payload.nivelServico ? Number(payload.nivelServico) / 100 : null,
+    janela_historica_dias: payload.janelaHistoricaDias ? Number(payload.janelaHistoricaDias) : null,
+    lead_time_dias: payload.leadTimeDias ? Number(payload.leadTimeDias) : null,
+    desvio_lead_time_dias: payload.desvioLeadTimeDias ? Number(payload.desvioLeadTimeDias) : null,
+    periodo_revisao_dias: payload.periodoRevisaoDias ? Number(payload.periodoRevisaoDias) : null,
+    lote_minimo: Number(payload.loteMinimo || 0),
+    multiplo_compra: Number(payload.multiploCompra || 1),
+    critico: payload.critico === "on",
     ativo: payload.ativo === "on"
   };
 }
@@ -840,6 +897,76 @@ export async function updateSupabaseMaterial(id: number, payload: Record<string,
 export async function setSupabaseMaterialAtivo(id: number, ativo: boolean): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.from("estoque_materiais").update({ ativo }).eq("id_material", id);
+  if (error) throw error;
+}
+
+export async function loadEstoqueConfiguracao(): Promise<EstoqueConfiguracao> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("estoque_configuracoes").select("*").eq("id_configuracao", 1).single();
+  if (error) throw error;
+  return {
+    nivelServico: Number(data.nivel_servico),
+    janelaHistoricaDias: Number(data.janela_historica_dias),
+    leadTimeDias: Number(data.lead_time_dias),
+    desvioLeadTimeDias: Number(data.desvio_lead_time_dias),
+    periodoRevisaoDias: Number(data.periodo_revisao_dias),
+    minimoObservacoes: Number(data.minimo_observacoes)
+  };
+}
+
+export async function updateEstoqueConfiguracao(payload: Record<string, FormDataEntryValue>): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("estoque_configuracoes").update({
+    nivel_servico: Number(payload.nivelServico) / 100,
+    janela_historica_dias: Number(payload.janelaHistoricaDias),
+    lead_time_dias: Number(payload.leadTimeDias),
+    desvio_lead_time_dias: Number(payload.desvioLeadTimeDias),
+    periodo_revisao_dias: Number(payload.periodoRevisaoDias),
+    minimo_observacoes: Number(payload.minimoObservacoes),
+    atualizado_em: new Date().toISOString()
+  }).eq("id_configuracao", 1);
+  if (error) throw error;
+}
+
+export async function loadEstoquePlanejamento(): Promise<EstoquePlanejamento[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("vw_estoque_planejamento").select("*").order("situacao").order("descricao");
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    idMaterial: Number(row.id_material),
+    codigo: row.codigo || "",
+    descricao: row.descricao,
+    categoria: row.categoria || "",
+    unidadeMedida: row.unidade_medida,
+    estoqueAtual: Number(row.estoque_atual),
+    critico: Boolean(row.critico),
+    nivelServico: Number(row.nivel_servico),
+    fatorServico: Number(row.fator_servico),
+    janelaHistoricaDias: Number(row.janela_historica_dias),
+    leadTimeDias: Number(row.lead_time_dias),
+    diasComConsumo: Number(row.dias_com_consumo),
+    consumoPeriodo: Number(row.consumo_periodo),
+    demandaMedia: Number(row.demanda_media),
+    desvioDemanda: Number(row.desvio_demanda),
+    estoqueSeguranca: Number(row.estoque_seguranca),
+    pontoRessuprimento: Number(row.ponto_ressuprimento),
+    estoqueAlvo: Number(row.estoque_alvo),
+    coberturaDias: row.cobertura_dias == null ? null : Number(row.cobertura_dias),
+    sugestaoCompra: Number(row.sugestao_compra),
+    situacao: row.situacao
+  }));
+}
+
+export async function createEstoqueMovimentacao(payload: Record<string, FormDataEntryValue>): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc("registrar_movimentacao_estoque", {
+    p_id_material: Number(payload.idMaterial),
+    p_tipo_codigo: String(payload.tipoCodigo),
+    p_quantidade: Number(payload.quantidade),
+    p_data_movimentacao: new Date(String(payload.dataMovimentacao)).toISOString(),
+    p_origem: String(payload.origem || "").trim(),
+    p_observacao: String(payload.observacao || "").trim()
+  });
   if (error) throw error;
 }
 

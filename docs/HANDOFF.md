@@ -157,3 +157,10 @@ Se quiser continuar pela Fase 2:
 ```text
 Leia o handoff e continue a Fase 2 de cadastros base, implementando Empresas, usando o schema canonico e sem antecipar Contratos.
 ```
+# Planejamento de estoque — 2026-07-17
+
+- Parametros globais: nivel de servico, janela historica, lead time, desvio do lead time, periodo de revisao e minimo de observacoes.
+- Excecoes por material: nivel de servico, janela, lead time, desvio, revisao, lote minimo, multiplo de compra e criticidade.
+- Indicadores: consumo medio, desvio, estoque de seguranca, ponto de ressuprimento, estoque-alvo, cobertura, sugestao e situacao.
+- Fonte da demanda: somente movimentacoes canonicas do tipo `saida`; ajustes e entradas nao compoem consumo.
+- A sugestao nao cria pedido automaticamente.

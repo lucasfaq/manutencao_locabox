@@ -94,6 +94,8 @@ Cadastros canonicos ja migrados no frontend: `clientes`, `empresas`, `contratos`
 
 A tela de Unidades usa `unidades_instaladas`: leitura para usuarios autenticados e manutencao do cadastro por gestores. O cadastro inclui estado, cidade, bairro, rua e link do Google Maps, com filtros encadeados por localizacao.
 
+O modulo de Estoque possui planejamento de ressuprimento baseado nas saidas auditaveis de `movimentacoes_estoque`. Ele calcula demanda media, desvio da demanda, estoque de seguranca, ponto de ressuprimento, estoque-alvo, cobertura e sugestao de compra. Parametros gerais podem ser sobrescritos por material; somente gestores alteram configuracoes e cadastros.
+
 A tela Pessoas permite ao gestor administrar separadamente `colaboradores` e `terceirizados`, sem exclusao fisica.
 
 ### Usuarios e acessos

@@ -29,6 +29,7 @@ import {
   Colaborador,
   Contrato,
   createAdminUser,
+  createEstoqueMovimentacao,
   createSupabaseCliente,
   createSupabaseColaborador,
   createSupabaseContrato,
@@ -42,8 +43,12 @@ import {
   getCurrentSession,
   hasSupabaseConfig,
   Empresa,
+  EstoqueConfiguracao,
+  EstoquePlanejamento,
   loadPerfil,
   loadAdminUsers,
+  loadEstoqueConfiguracao,
+  loadEstoquePlanejamento,
   loadSupabaseMateriais,
   loadSupabaseClientes,
   loadSupabaseColaboradores,
@@ -74,6 +79,7 @@ import {
   signOut,
   supabase,
   updateAdminUser,
+  updateEstoqueConfiguracao,
   updateSupabaseMaterial,
   updateSupabaseCliente,
   updateSupabaseColaborador,
@@ -182,6 +188,8 @@ export function App() {
   const [selectedUsuario, setSelectedUsuario] = useState<AdminUser | null>(null);
   const [materiais, setMateriais] = useState<MaterialEstoque[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<MaterialEstoque | null>(null);
+  const [estoqueConfiguracao, setEstoqueConfiguracao] = useState<EstoqueConfiguracao | null>(null);
+  const [estoquePlanejamento, setEstoquePlanejamento] = useState<EstoquePlanejamento[]>([]);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
@@ -293,9 +301,18 @@ export function App() {
     if (!hasSupabaseConfig || !session) {
       setMateriais([]);
       setSelectedMaterial(null);
+      setEstoqueConfiguracao(null);
+      setEstoquePlanejamento([]);
       return;
     }
-    setMateriais(await loadSupabaseMateriais());
+    const [nextMateriais, nextConfiguracao, nextPlanejamento] = await Promise.all([
+      loadSupabaseMateriais(),
+      loadEstoqueConfiguracao(),
+      loadEstoquePlanejamento()
+    ]);
+    setMateriais(nextMateriais);
+    setEstoqueConfiguracao(nextConfiguracao);
+    setEstoquePlanejamento(nextPlanejamento);
   }
 
   useEffect(() => {
@@ -471,6 +488,13 @@ export function App() {
     const text = query.toLowerCase();
     return materiais.filter((item) => [item.codigo, item.descricao, item.categoria, item.unidadeMedida].join(" ").toLowerCase().includes(text));
   }, [materiais, query]);
+
+  const filteredEstoquePlanejamento = useMemo(() => {
+    const text = query.toLowerCase();
+    return estoquePlanejamento.filter((item) =>
+      [item.codigo, item.descricao, item.categoria, item.situacao].join(" ").toLowerCase().includes(text)
+    );
+  }, [estoquePlanejamento, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -722,6 +746,32 @@ export function App() {
       await loadMateriais();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar material.");
+    }
+  }
+
+  async function submitEstoqueConfiguracao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+    setErrorMessage("");
+    try {
+      await updateEstoqueConfiguracao(payload);
+      await loadMateriais();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar parametros de estoque.");
+    }
+  }
+
+  async function submitEstoqueMovimentacao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      await createEstoqueMovimentacao(payload);
+      formElement.reset();
+      await loadMateriais();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao registrar movimentacao.");
     }
   }
 
@@ -1409,27 +1459,66 @@ export function App() {
         )}
 
         {page === "estoque" && (
-          <section className={isGestor ? "two-columns catalog-layout" : "panel full"}>
+          <section className="inventory-planning-page">
+            <section className="inventory-kpis">
+              <article><span>Comprar</span><strong>{estoquePlanejamento.filter((item) => item.situacao === "comprar" || item.situacao === "ruptura").length}</strong><small>materiais prioritarios</small></article>
+              <article><span>Sugestao total</span><strong>{estoquePlanejamento.reduce((sum, item) => sum + item.sugestaoCompra, 0).toLocaleString("pt-BR")}</strong><small>unidades para reposicao</small></article>
+              <article><span>Sem historico</span><strong>{estoquePlanejamento.filter((item) => item.situacao === "sem_historico").length}</strong><small>aguardando consumo</small></article>
+              <article><span>Criticos</span><strong>{estoquePlanejamento.filter((item) => item.critico).length}</strong><small>materiais classificados</small></article>
+            </section>
+
             <section className="panel full">
-              <div className="panel-heading"><h2>Materiais e estoque</h2><span>{filteredMateriais.length} itens</span></div>
-              <div className="inventory-grid">
-                {filteredMateriais.map((item) => {
-                  const baixo = item.estoqueAtual <= item.estoqueMinimo;
-                  return <article key={item.idMaterial} className={`inventory-card ${baixo ? "low" : ""}`}>
-                    <PackageSearch size={20} />
-                    <div><strong>{item.descricao}</strong><span>{item.codigo || "Sem codigo"} · {item.categoria || "Sem categoria"} · minimo {item.estoqueMinimo} {item.unidadeMedida}</span></div>
-                    <b>{item.estoqueAtual}</b>
-                    {isGestor && <div className="row-actions">
-                      <button className="icon-button" title="Editar material" onClick={() => setSelectedMaterial(item)}><Edit3 size={16} /></button>
-                      <button className="icon-button" title={item.ativo ? "Inativar material" : "Reativar material"} onClick={() => toggleMaterialAtivo(item)}><Power size={16} /></button>
-                    </div>}
-                  </article>;
-                })}
+              <div className="panel-heading"><h2>Planejamento de ressuprimento</h2><span>{filteredEstoquePlanejamento.length} itens</span></div>
+              <div className="table-wrap">
+                <table className="planning-table">
+                  <thead><tr><th>Material</th><th>Saldo</th><th>Consumo medio</th><th>Seguranca</th><th>Ponto de compra</th><th>Cobertura</th><th>Sugestao</th><th>Situacao</th>{isGestor && <th>Acoes</th>}</tr></thead>
+                  <tbody>
+                    {filteredEstoquePlanejamento.map((item) => {
+                      const material = materiais.find((candidate) => candidate.idMaterial === item.idMaterial);
+                      return <tr key={item.idMaterial}>
+                        <td><strong>{item.descricao}{item.critico ? " ★" : ""}</strong><small>{item.codigo || "Sem codigo"} · {item.categoria || "Sem categoria"}</small></td>
+                        <td>{item.estoqueAtual.toLocaleString("pt-BR")} {item.unidadeMedida}</td>
+                        <td>{item.demandaMedia.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}/dia<small>{item.diasComConsumo} dias com consumo</small></td>
+                        <td>{item.estoqueSeguranca.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
+                        <td>{item.pontoRessuprimento.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
+                        <td>{item.coberturaDias == null ? "—" : `${item.coberturaDias.toLocaleString("pt-BR")} dias`}</td>
+                        <td><strong>{item.sugestaoCompra.toLocaleString("pt-BR")} {item.unidadeMedida}</strong><small>alvo {item.estoqueAlvo.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</small></td>
+                        <td><span className={`inventory-status ${item.situacao}`}>{inventoryStatusLabel(item.situacao)}</span></td>
+                        {isGestor && <td><div className="row-actions">
+                          <button className="icon-button" title="Editar parametros do material" onClick={() => setSelectedMaterial(material || null)}><Edit3 size={16} /></button>
+                          {material && <button className="icon-button" title={material.ativo ? "Inativar material" : "Reativar material"} onClick={() => toggleMaterialAtivo(material)}><Power size={16} /></button>}
+                        </div></td>}
+                      </tr>;
+                    })}
+                    {!filteredEstoquePlanejamento.length && <tr><td colSpan={isGestor ? 9 : 8}><span className="empty-state">Nenhum material encontrado.</span></td></tr>}
+                  </tbody>
+                </table>
               </div>
             </section>
-            {isGestor && <section className="panel">
-              <div className="panel-heading"><h2>{selectedMaterial ? "Editar material" : "Novo material"}</h2>{selectedMaterial && <button onClick={() => setSelectedMaterial(null)}>Novo</button>}</div>
-              <MaterialForm material={selectedMaterial} onSubmit={submitMaterial} />
+
+            {isGestor && <section className="panel full">
+              <div className="panel-heading"><h2>Registrar movimentacao</h2><span>Entrada ou saida auditavel</span></div>
+              <EstoqueMovimentacaoForm materiais={materiais.filter((item) => item.ativo)} onSubmit={submitEstoqueMovimentacao} />
+            </section>}
+
+            {isGestor && <section className="two-columns inventory-settings-layout">
+              <section className="panel">
+                <div className="panel-heading"><h2>{selectedMaterial ? "Editar material" : "Novo material"}</h2>{selectedMaterial && <button onClick={() => setSelectedMaterial(null)}>Novo</button>}</div>
+                <MaterialForm material={selectedMaterial} configuracao={estoqueConfiguracao} onSubmit={submitMaterial} />
+                <div className="inventory-catalog">
+                  <h3>Materiais cadastrados</h3>
+                  {filteredMateriais.map((item) => (
+                    <button type="button" key={item.idMaterial} onClick={() => setSelectedMaterial(item)}>
+                      <span>{item.descricao}</span>
+                      <small>{item.ativo ? "Ativo" : "Inativo"} · {item.codigo || "sem codigo"}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="panel">
+                <div className="panel-heading"><h2>Parametros gerais</h2><span>Padroes herdados</span></div>
+                {estoqueConfiguracao && <EstoqueConfiguracaoForm configuracao={estoqueConfiguracao} onSubmit={submitEstoqueConfiguracao} />}
+              </section>
             </section>}
           </section>
         )}
@@ -1836,8 +1925,19 @@ function UsuarioForm({ usuario, colaboradores, onSubmit }: {
   );
 }
 
-function MaterialForm({ material, onSubmit }: {
+function inventoryStatusLabel(status: EstoquePlanejamento["situacao"]) {
+  return {
+    sem_historico: "Sem historico",
+    ruptura: "Ruptura",
+    comprar: "Comprar",
+    atencao: "Atencao",
+    normal: "Normal"
+  }[status];
+}
+
+function MaterialForm({ material, configuracao, onSubmit }: {
   material: MaterialEstoque | null;
+  configuracao: EstoqueConfiguracao | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -1847,9 +1947,64 @@ function MaterialForm({ material, onSubmit }: {
       <label className="wide">Categoria<input name="categoria" defaultValue={material?.categoria || ""} maxLength={120} /></label>
       <label>Unidade<input name="unidadeMedida" defaultValue={material?.unidadeMedida || "un"} required maxLength={20} /></label>
       <label>Estoque minimo<input name="estoqueMinimo" type="number" min="0" step="0.01" defaultValue={material?.estoqueMinimo ?? 0} /></label>
+      <label>Nivel de servico (%)<input name="nivelServico" type="number" min="50" max="99.99" step="0.01" defaultValue={material?.nivelServico ? material.nivelServico * 100 : ""} placeholder={configuracao ? String(configuracao.nivelServico * 100) : "95"} /></label>
+      <label>Lead time (dias)<input name="leadTimeDias" type="number" min="1" max="365" defaultValue={material?.leadTimeDias ?? ""} placeholder={String(configuracao?.leadTimeDias || 5)} /></label>
+      <label>Desvio do lead time<input name="desvioLeadTimeDias" type="number" min="0" step="0.01" defaultValue={material?.desvioLeadTimeDias ?? ""} placeholder={String(configuracao?.desvioLeadTimeDias || 1)} /></label>
+      <label>Periodo de revisao<input name="periodoRevisaoDias" type="number" min="1" max="365" defaultValue={material?.periodoRevisaoDias ?? ""} placeholder={String(configuracao?.periodoRevisaoDias || 7)} /></label>
+      <label>Janela historica<input name="janelaHistoricaDias" type="number" min="7" max="730" defaultValue={material?.janelaHistoricaDias ?? ""} placeholder={String(configuracao?.janelaHistoricaDias || 90)} /></label>
+      <label>Lote minimo<input name="loteMinimo" type="number" min="0" step="0.01" defaultValue={material?.loteMinimo ?? 0} /></label>
+      <label>Multiplo de compra<input name="multiploCompra" type="number" min="0.01" step="0.01" defaultValue={material?.multiploCompra ?? 1} required /></label>
+      <label className="checkbox-field wide"><input name="critico" type="checkbox" defaultChecked={material?.critico ?? false} /><span>Material critico</span></label>
       <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={material?.ativo ?? true} /><span>Ativo</span></label>
       <button className="primary-button"><CheckCircle2 size={16} />{material ? "Salvar material" : "Criar material"}</button>
       {material && <small>O estoque atual e alterado somente por movimentacoes, preservando o historico.</small>}
+    </form>
+  );
+}
+
+function EstoqueConfiguracaoForm({ configuracao, onSubmit }: {
+  configuracao: EstoqueConfiguracao;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={`${configuracao.nivelServico}-${configuracao.janelaHistoricaDias}`} className="form-grid" onSubmit={onSubmit}>
+      <label>Nivel de servico (%)<input name="nivelServico" type="number" min="50" max="99.99" step="0.01" defaultValue={configuracao.nivelServico * 100} required /></label>
+      <label>Janela historica (dias)<input name="janelaHistoricaDias" type="number" min="7" max="730" defaultValue={configuracao.janelaHistoricaDias} required /></label>
+      <label>Lead time padrao<input name="leadTimeDias" type="number" min="1" max="365" defaultValue={configuracao.leadTimeDias} required /></label>
+      <label>Desvio do lead time<input name="desvioLeadTimeDias" type="number" min="0" step="0.01" defaultValue={configuracao.desvioLeadTimeDias} required /></label>
+      <label>Periodo de revisao<input name="periodoRevisaoDias" type="number" min="1" max="365" defaultValue={configuracao.periodoRevisaoDias} required /></label>
+      <label>Minimo de dias com consumo<input name="minimoObservacoes" type="number" min="2" max="365" defaultValue={configuracao.minimoObservacoes} required /></label>
+      <button className="primary-button"><CheckCircle2 size={16} />Salvar parametros</button>
+      <small className="wide">Os materiais sem parametro proprio herdam estes valores. O sistema nao gera compras automaticamente.</small>
+    </form>
+  );
+}
+
+function EstoqueMovimentacaoForm({ materiais, onSubmit }: {
+  materiais: MaterialEstoque[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const now = new Date();
+  const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return (
+    <form className="form-grid movement-form" onSubmit={onSubmit}>
+      <label className="wide">Material
+        <select name="idMaterial" required defaultValue="">
+          <option value="">Selecione</option>
+          {materiais.map((item) => <option key={item.idMaterial} value={item.idMaterial}>{item.descricao} — {item.codigo || "sem codigo"}</option>)}
+        </select>
+      </label>
+      <label>Tipo
+        <select name="tipoCodigo" defaultValue="entrada" required>
+          <option value="entrada">Entrada</option>
+          <option value="saida">Saida</option>
+        </select>
+      </label>
+      <label>Quantidade<input name="quantidade" type="number" min="0.01" step="0.01" required /></label>
+      <label>Data e hora<input name="dataMovimentacao" type="datetime-local" defaultValue={localDateTime} required /></label>
+      <label>Origem<input name="origem" maxLength={120} placeholder="Compra, inventario, consumo..." /></label>
+      <label className="wide">Observacao<textarea name="observacao" rows={2} maxLength={500} /></label>
+      <button className="primary-button"><CheckCircle2 size={16} />Registrar movimentacao</button>
     </form>
   );
 }
