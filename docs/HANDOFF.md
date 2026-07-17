@@ -45,6 +45,7 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - CRUD de `colaboradores` e `terceirizados` reunido na tela Pessoas;
   - administracao de usuarios Auth implementada na tela Usuarios;
   - Edge Function `admin-users` implantada para operacoes privilegiadas;
+  - tela Estoque migrada para `estoque_materiais`;
   - menu de Clientes visivel apenas para gestor;
   - menu de Empresas visivel apenas para gestor;
   - criacao/edicao de cliente usando `public.clientes`;
@@ -55,6 +56,7 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - pessoas operacionais mantidas em tabelas separadas, com soft-delete;
   - gestor pode criar conta, alterar email, perfil, vinculo, status e senha temporaria;
   - usuario autenticado pode alterar a propria senha;
+  - cadastro de materiais usa estoque minimo e saldo derivado por movimentacoes;
   - inativacao/reativacao por soft-delete via `ativo`;
   - tecnico permanece bloqueado para escrita por RLS.
 
@@ -138,9 +140,9 @@ Continuar Fase 2 - Cadastros base, migrando o frontend para o schema canonico ne
 4. Projetos - concluido.
 5. Unidades instaladas - concluido.
 6. Colaboradores e terceirizados - concluido.
-7. Equipes - proximo.
-8. Materiais/estoque.
-9. Catalogo de pendencias.
+7. Materiais/estoque - cadastro concluido; movimentacoes pendentes.
+8. Catalogo de pendencias - proximo.
+9. OS e Atendimentos canonicos, incluindo composicao de Equipes.
 
 ## Como retomar no Codex
 

@@ -150,6 +150,17 @@ export type AdminUser = {
   } | null;
 };
 
+export type MaterialEstoque = {
+  idMaterial: number;
+  codigo: string;
+  descricao: string;
+  categoria: string;
+  unidadeMedida: string;
+  estoqueMinimo: number;
+  estoqueAtual: number;
+  ativo: boolean;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -761,6 +772,59 @@ export async function updateAdminUser(
 export async function updateOwnPassword(password: string): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+const materialFields = "id_material, codigo, descricao, categoria, unidade_medida, estoque_minimo, estoque_atual, ativo";
+
+function mapMaterial(row: any): MaterialEstoque {
+  return {
+    idMaterial: Number(row.id_material),
+    codigo: row.codigo || "",
+    descricao: row.descricao,
+    categoria: row.categoria || "",
+    unidadeMedida: row.unidade_medida,
+    estoqueMinimo: Number(row.estoque_minimo),
+    estoqueAtual: Number(row.estoque_atual),
+    ativo: Boolean(row.ativo)
+  };
+}
+
+export async function loadSupabaseMateriais(): Promise<MaterialEstoque[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("estoque_materiais").select(materialFields).order("ativo", { ascending: false }).order("descricao");
+  if (error) throw error;
+  return (data || []).map(mapMaterial);
+}
+
+function materialPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    codigo: String(payload.codigo || "").trim() || null,
+    descricao: String(payload.descricao || "").trim(),
+    categoria: String(payload.categoria || "").trim(),
+    unidade_medida: String(payload.unidadeMedida || "un").trim(),
+    estoque_minimo: Number(payload.estoqueMinimo || 0),
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseMaterial(payload: Record<string, FormDataEntryValue>): Promise<MaterialEstoque> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("estoque_materiais").insert(materialPayload(payload)).select(materialFields).single();
+  if (error) throw error;
+  return mapMaterial(data);
+}
+
+export async function updateSupabaseMaterial(id: number, payload: Record<string, FormDataEntryValue>): Promise<MaterialEstoque> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("estoque_materiais").update(materialPayload(payload)).eq("id_material", id).select(materialFields).single();
+  if (error) throw error;
+  return mapMaterial(data);
+}
+
+export async function setSupabaseMaterialAtivo(id: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("estoque_materiais").update({ ativo }).eq("id_material", id);
   if (error) throw error;
 }
 

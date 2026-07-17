@@ -25,3 +25,5 @@
 | 2026-07-17 | Administracao de Auth usa Edge Function autenticada e validacao server-side de gestor | Operacoes `auth.admin` exigem chave secreta, que nunca pode ser exposta no GitHub Pages |
 | 2026-07-17 | Gestor nao pode desativar nem rebaixar a propria conta pela tela | Evita perda acidental do acesso administrativo |
 | 2026-07-17 | Senhas nunca sao exibidas; gestor define senha temporaria e cada usuario pode trocar a propria senha | Supabase armazena credenciais de forma nao recuperavel e a interface deve evitar exposicao de segredo |
+| 2026-07-17 | Equipes sera implementada dentro do atendimento canonico, nao como cadastro isolado | A tabela `equipes` exige `id_atendimento` e representa membros alocados em cada atendimento |
+| 2026-07-17 | Saldo de material e somente leitura no cadastro e sera alterado por movimentacoes | Preserva rastreabilidade e respeita as triggers de estoque do schema canonico |

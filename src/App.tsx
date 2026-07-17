@@ -33,6 +33,7 @@ import {
   createSupabaseColaborador,
   createSupabaseContrato,
   createSupabaseEmpresa,
+  createSupabaseMaterial,
   createSupabaseAtendimento,
   createSupabaseOrdem,
   createSupabaseProjeto,
@@ -43,6 +44,7 @@ import {
   Empresa,
   loadPerfil,
   loadAdminUsers,
+  loadSupabaseMateriais,
   loadSupabaseClientes,
   loadSupabaseColaboradores,
   loadSupabaseContratos,
@@ -54,6 +56,7 @@ import {
   loadStatusContratos,
   loadStatusUnidades,
   Ordem,
+  MaterialEstoque,
   PerfilUsuario,
   Projeto,
   Session,
@@ -63,6 +66,7 @@ import {
   setSupabaseColaboradorAtivo,
   setSupabaseContratoAtivo,
   setSupabaseEmpresaAtivo,
+  setSupabaseMaterialAtivo,
   setSupabaseProjetoAtivo,
   setSupabaseTerceirizadoAtivo,
   setSupabaseUnidadeInstaladaAtiva,
@@ -70,6 +74,7 @@ import {
   signOut,
   supabase,
   updateAdminUser,
+  updateSupabaseMaterial,
   updateSupabaseCliente,
   updateSupabaseColaborador,
   updateSupabaseContrato,
@@ -171,6 +176,8 @@ export function App() {
   const [selectedTerceirizado, setSelectedTerceirizado] = useState<Terceirizado | null>(null);
   const [usuarios, setUsuarios] = useState<AdminUser[]>([]);
   const [selectedUsuario, setSelectedUsuario] = useState<AdminUser | null>(null);
+  const [materiais, setMateriais] = useState<MaterialEstoque[]>([]);
+  const [selectedMaterial, setSelectedMaterial] = useState<MaterialEstoque | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
@@ -278,6 +285,15 @@ export function App() {
     setUsuarios(await loadAdminUsers());
   }
 
+  async function loadMateriais() {
+    if (!hasSupabaseConfig || !session) {
+      setMateriais([]);
+      setSelectedMaterial(null);
+      return;
+    }
+    setMateriais(await loadSupabaseMateriais());
+  }
+
   useEffect(() => {
     if (!hasSupabaseConfig) {
       setAuthReady(true);
@@ -338,6 +354,7 @@ export function App() {
     loadProjetos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar projetos."));
     loadUnidadesInstaladas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar unidades instaladas."));
     loadPessoas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar pessoas."));
+    loadMateriais().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar materiais."));
   }, [isGestor, session?.access_token]);
 
   useEffect(() => {
@@ -424,6 +441,11 @@ export function App() {
         .includes(text)
     );
   }, [usuarios, query]);
+
+  const filteredMateriais = useMemo(() => {
+    const text = query.toLowerCase();
+    return materiais.filter((item) => [item.codigo, item.descricao, item.categoria, item.unidadeMedida].join(" ").toLowerCase().includes(text));
+  }, [materiais, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -659,6 +681,34 @@ export function App() {
       window.alert("Sua senha foi alterada.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar sua senha.");
+    }
+  }
+
+  async function submitMaterial(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedMaterial) await updateSupabaseMaterial(selectedMaterial.idMaterial, payload);
+      else await createSupabaseMaterial(payload);
+      setSelectedMaterial(null);
+      formElement.reset();
+      await loadMateriais();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar material.");
+    }
+  }
+
+  async function toggleMaterialAtivo(material: MaterialEstoque) {
+    const nextAtivo = !material.ativo;
+    if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} material ${material.descricao}?`)) return;
+    setErrorMessage("");
+    try {
+      await setSupabaseMaterialAtivo(material.idMaterial, nextAtivo);
+      await loadMateriais();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do material.");
     }
   }
 
@@ -1289,26 +1339,28 @@ export function App() {
         )}
 
         {page === "estoque" && (
-          <section className="panel full">
-            <div className="panel-heading">
-              <h2>Estoque operacional</h2>
-              <span>{data.estoque.length} itens</span>
-            </div>
-            <div className="inventory-grid">
-              {data.estoque.map((item) => {
-                const baixo = item.quantidade <= item.minimo;
-                return (
-                  <article key={item.id} className={`inventory-card ${baixo ? "low" : ""}`}>
+          <section className={isGestor ? "two-columns catalog-layout" : "panel full"}>
+            <section className="panel full">
+              <div className="panel-heading"><h2>Materiais e estoque</h2><span>{filteredMateriais.length} itens</span></div>
+              <div className="inventory-grid">
+                {filteredMateriais.map((item) => {
+                  const baixo = item.estoqueAtual <= item.estoqueMinimo;
+                  return <article key={item.idMaterial} className={`inventory-card ${baixo ? "low" : ""}`}>
                     <PackageSearch size={20} />
-                    <div>
-                      <strong>{item.item}</strong>
-                      <span>{item.categoria} · minimo {item.minimo} {item.unidade}</span>
-                    </div>
-                    <b>{item.quantidade}</b>
-                  </article>
-                );
-              })}
-            </div>
+                    <div><strong>{item.descricao}</strong><span>{item.codigo || "Sem codigo"} · {item.categoria || "Sem categoria"} · minimo {item.estoqueMinimo} {item.unidadeMedida}</span></div>
+                    <b>{item.estoqueAtual}</b>
+                    {isGestor && <div className="row-actions">
+                      <button className="icon-button" title="Editar material" onClick={() => setSelectedMaterial(item)}><Edit3 size={16} /></button>
+                      <button className="icon-button" title={item.ativo ? "Inativar material" : "Reativar material"} onClick={() => toggleMaterialAtivo(item)}><Power size={16} /></button>
+                    </div>}
+                  </article>;
+                })}
+              </div>
+            </section>
+            {isGestor && <section className="panel">
+              <div className="panel-heading"><h2>{selectedMaterial ? "Editar material" : "Novo material"}</h2>{selectedMaterial && <button onClick={() => setSelectedMaterial(null)}>Novo</button>}</div>
+              <MaterialForm material={selectedMaterial} onSubmit={submitMaterial} />
+            </section>}
           </section>
         )}
 
@@ -1705,6 +1757,24 @@ function UsuarioForm({ usuario, colaboradores, onSubmit }: {
         <span>Usuario ativo</span>
       </label>
       <button className="primary-button"><ShieldCheck size={16} />{usuario ? "Salvar acesso" : "Criar usuario"}</button>
+    </form>
+  );
+}
+
+function MaterialForm({ material, onSubmit }: {
+  material: MaterialEstoque | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={material?.idMaterial || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Codigo<input name="codigo" defaultValue={material?.codigo || ""} maxLength={80} /></label>
+      <label className="wide">Descricao<input name="descricao" defaultValue={material?.descricao || ""} required maxLength={180} /></label>
+      <label className="wide">Categoria<input name="categoria" defaultValue={material?.categoria || ""} maxLength={120} /></label>
+      <label>Unidade<input name="unidadeMedida" defaultValue={material?.unidadeMedida || "un"} required maxLength={20} /></label>
+      <label>Estoque minimo<input name="estoqueMinimo" type="number" min="0" step="0.01" defaultValue={material?.estoqueMinimo ?? 0} /></label>
+      <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={material?.ativo ?? true} /><span>Ativo</span></label>
+      <button className="primary-button"><CheckCircle2 size={16} />{material ? "Salvar material" : "Criar material"}</button>
+      {material && <small>O estoque atual e alterado somente por movimentacoes, preservando o historico.</small>}
     </form>
   );
 }

@@ -100,6 +100,8 @@ A tela Pessoas permite ao gestor administrar separadamente `colaboradores` e `te
 
 A tela Usuarios usa a Edge Function autenticada `admin-users` para listar e criar contas, alterar email, perfil, vinculo com colaborador, status de acesso e senha temporaria. A chave administrativa permanece somente no Supabase; o frontend nunca recebe `service_role`.
 
+A tela Estoque consulta `estoque_materiais`. Gestores administram o cadastro e o estoque atual permanece derivado das movimentacoes.
+
 ## GitHub
 
 Repositorio alvo:
