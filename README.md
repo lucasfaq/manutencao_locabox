@@ -96,6 +96,10 @@ A tela de Unidades usa `unidades_instaladas`: leitura para usuarios autenticados
 
 A tela Pessoas permite ao gestor administrar separadamente `colaboradores` e `terceirizados`, sem exclusao fisica.
 
+### Usuarios e acessos
+
+A tela Usuarios usa a Edge Function autenticada `admin-users` para listar e criar contas, alterar email, perfil, vinculo com colaborador, status de acesso e senha temporaria. A chave administrativa permanece somente no Supabase; o frontend nunca recebe `service_role`.
+
 ## GitHub
 
 Repositorio alvo:

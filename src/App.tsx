@@ -22,11 +22,13 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  AdminUser,
   Atendimento,
   Bootstrap,
   Cliente,
   Colaborador,
   Contrato,
+  createAdminUser,
   createSupabaseCliente,
   createSupabaseColaborador,
   createSupabaseContrato,
@@ -40,6 +42,7 @@ import {
   hasSupabaseConfig,
   Empresa,
   loadPerfil,
+  loadAdminUsers,
   loadSupabaseClientes,
   loadSupabaseColaboradores,
   loadSupabaseContratos,
@@ -66,6 +69,7 @@ import {
   signInWithPassword,
   signOut,
   supabase,
+  updateAdminUser,
   updateSupabaseCliente,
   updateSupabaseColaborador,
   updateSupabaseContrato,
@@ -73,12 +77,13 @@ import {
   updateSupabaseProjeto,
   updateSupabaseTerceirizado,
   updateSupabaseUnidadeInstalada,
+  updateOwnPassword,
   Unidade,
   UnidadeInstalada,
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -95,6 +100,7 @@ const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard 
   { page: "contratos", label: "Contratos", icon: ClipboardList },
   { page: "projetos", label: "Projetos", icon: MapPin },
   { page: "pessoas", label: "Pessoas", icon: UserRound },
+  { page: "usuarios", label: "Usuarios", icon: ShieldCheck },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
@@ -163,10 +169,12 @@ export function App() {
   const [terceirizados, setTerceirizados] = useState<Terceirizado[]>([]);
   const [selectedColaborador, setSelectedColaborador] = useState<Colaborador | null>(null);
   const [selectedTerceirizado, setSelectedTerceirizado] = useState<Terceirizado | null>(null);
+  const [usuarios, setUsuarios] = useState<AdminUser[]>([]);
+  const [selectedUsuario, setSelectedUsuario] = useState<AdminUser | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "relatorios"].includes(item.page))),
+    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "usuarios", "relatorios"].includes(item.page))),
     [isGestor]
   );
 
@@ -261,6 +269,15 @@ export function App() {
     setTerceirizados(nextTerceirizados);
   }
 
+  async function loadUsuarios() {
+    if (!hasSupabaseConfig || !isGestor) {
+      setUsuarios([]);
+      setSelectedUsuario(null);
+      return;
+    }
+    setUsuarios(await loadAdminUsers());
+  }
+
   useEffect(() => {
     if (!hasSupabaseConfig) {
       setAuthReady(true);
@@ -309,7 +326,7 @@ export function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos" || page === "pessoas") && !isGestor) {
+    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos" || page === "pessoas" || page === "usuarios") && !isGestor) {
       setPage("dashboard");
     }
   }, [isGestor, page]);
@@ -322,6 +339,11 @@ export function App() {
     loadUnidadesInstaladas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar unidades instaladas."));
     loadPessoas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar pessoas."));
   }, [isGestor, session?.access_token]);
+
+  useEffect(() => {
+    if (page !== "usuarios" || !isGestor) return;
+    loadUsuarios().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar usuarios."));
+  }, [page, isGestor, session?.access_token]);
 
   const filteredOrdens = useMemo(() => {
     const text = query.toLowerCase();
@@ -391,6 +413,17 @@ export function App() {
     const text = query.toLowerCase();
     return terceirizados.filter((item) => [item.nome, item.empresa, item.documento, item.telefone].join(" ").toLowerCase().includes(text));
   }, [terceirizados, query]);
+
+  const filteredUsuarios = useMemo(() => {
+    const text = query.toLowerCase();
+    return usuarios.filter((item) =>
+      [item.email, item.profile?.nome, item.profile?.perfil, item.profile?.ativo ? "ativo" : "inativo"]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(text)
+    );
+  }, [usuarios, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -596,6 +629,36 @@ export function App() {
       await loadPessoas();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status.");
+    }
+  }
+
+  async function submitUsuario(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedUsuario) await updateAdminUser(selectedUsuario, payload);
+      else await createAdminUser(payload);
+      setSelectedUsuario(null);
+      formElement.reset();
+      await loadUsuarios();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar usuario.");
+    }
+  }
+
+  async function submitOwnPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const password = String(new FormData(formElement).get("ownPassword") || "");
+    setErrorMessage("");
+    try {
+      await updateOwnPassword(password);
+      formElement.reset();
+      window.alert("Sua senha foi alterada.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar sua senha.");
     }
   }
 
@@ -1086,6 +1149,44 @@ export function App() {
           </section>
         )}
 
+        {page === "usuarios" && isGestor && (
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading"><h2>Usuarios e acessos</h2><span>{filteredUsuarios.length} contas</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Usuario</th><th>Perfil</th><th>Ultimo acesso</th><th>Status</th><th>Acoes</th></tr></thead>
+                  <tbody>
+                    {filteredUsuarios.map((usuario) => (
+                      <tr key={usuario.id}>
+                        <td><strong>{usuario.profile?.nome || usuario.email}</strong><small>{usuario.email}</small></td>
+                        <td>{usuario.profile?.perfil || "Sem perfil"}</td>
+                        <td>{usuario.lastSignInAt ? new Date(usuario.lastSignInAt).toLocaleString("pt-BR") : "Nunca acessou"}</td>
+                        <td><StatusPill value={usuario.profile?.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td><button className="icon-button" title="Editar usuario" onClick={() => setSelectedUsuario(usuario)}><Edit3 size={16} /></button></td>
+                      </tr>
+                    ))}
+                    {!filteredUsuarios.length && <tr><td colSpan={5}><span className="empty-state">Nenhum usuario encontrado.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <div>
+              <section className="panel">
+                <div className="panel-heading"><h2>{selectedUsuario ? "Editar usuario" : "Novo usuario"}</h2>{selectedUsuario && <button onClick={() => setSelectedUsuario(null)}>Novo</button>}</div>
+                <UsuarioForm usuario={selectedUsuario} colaboradores={colaboradores} onSubmit={submitUsuario} />
+              </section>
+              <section className="panel account-password-panel">
+                <div className="panel-heading"><h2>Minha senha</h2></div>
+                <form className="form-grid" onSubmit={submitOwnPassword}>
+                  <label className="wide">Nova senha<input name="ownPassword" type="password" required minLength={8} autoComplete="new-password" /></label>
+                  <button className="primary-button"><ShieldCheck size={16} />Alterar minha senha</button>
+                </form>
+              </section>
+            </div>
+          </section>
+        )}
+
         {page === "ordens" && (
           <section className="panel full">
             <div className="panel-heading">
@@ -1568,6 +1669,42 @@ function TerceirizadoForm({ terceirizado, onSubmit }: {
       <label className="wide">Telefone<input name="telefone" defaultValue={terceirizado?.telefone || ""} maxLength={40} /></label>
       <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={terceirizado?.ativo ?? true} /><span>Ativo</span></label>
       <button className="primary-button"><CheckCircle2 size={16} />{terceirizado ? "Salvar terceirizado" : "Criar terceirizado"}</button>
+    </form>
+  );
+}
+
+function UsuarioForm({ usuario, colaboradores, onSubmit }: {
+  usuario: AdminUser | null;
+  colaboradores: Colaborador[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={usuario?.id || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Nome<input name="nome" defaultValue={usuario?.profile?.nome || ""} required maxLength={160} /></label>
+      <label className="wide">Email<input name="email" type="email" defaultValue={usuario?.email || ""} required maxLength={160} /></label>
+      <label className="wide">
+        Perfil
+        <select name="perfil" defaultValue={usuario?.profile?.perfil || "tecnico"} required>
+          <option value="tecnico">Tecnico</option>
+          <option value="gestor">Gestor</option>
+        </select>
+      </label>
+      <label className="wide">
+        Colaborador vinculado
+        <select name="idColaborador" defaultValue={usuario?.profile?.id_colaborador || ""}>
+          <option value="">Sem vinculo</option>
+          {colaboradores.map((item) => <option key={item.idColaborador} value={item.idColaborador}>{item.nome}</option>)}
+        </select>
+      </label>
+      <label className="wide">
+        {usuario ? "Nova senha temporaria (opcional)" : "Senha temporaria"}
+        <input name="password" type="password" required={!usuario} minLength={8} autoComplete="new-password" />
+      </label>
+      <label className="checkbox-field wide">
+        <input name="ativo" type="checkbox" defaultChecked={usuario?.profile?.ativo ?? true} disabled={!usuario} />
+        <span>Usuario ativo</span>
+      </label>
+      <button className="primary-button"><ShieldCheck size={16} />{usuario ? "Salvar acesso" : "Criar usuario"}</button>
     </form>
   );
 }

@@ -22,3 +22,6 @@
 | 2026-07-17 | Projetos pertencem obrigatoriamente a um contrato canonico | Preserva a hierarquia operacional usada por unidades, OS e relatorios |
 | 2026-07-17 | Unidades instaladas substituem a listagem legada na tela de Unidades; leitura e operacional, escrita e de gestor | Migra a interface sem retirar dos tecnicos a visibilidade necessaria para OS e atendimentos |
 | 2026-07-17 | Colaboradores e terceirizados compartilham a tela Pessoas, mas permanecem em tabelas e formularios distintos | Evita misturar vinculos internos e externos e prepara a composicao de equipes |
+| 2026-07-17 | Administracao de Auth usa Edge Function autenticada e validacao server-side de gestor | Operacoes `auth.admin` exigem chave secreta, que nunca pode ser exposta no GitHub Pages |
+| 2026-07-17 | Gestor nao pode desativar nem rebaixar a propria conta pela tela | Evita perda acidental do acesso administrativo |
+| 2026-07-17 | Senhas nunca sao exibidas; gestor define senha temporaria e cada usuario pode trocar a propria senha | Supabase armazena credenciais de forma nao recuperavel e a interface deve evitar exposicao de segredo |

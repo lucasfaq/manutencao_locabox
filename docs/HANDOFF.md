@@ -43,6 +43,8 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - CRUD de `projetos` implementado no frontend;
   - tela de unidades migrada para `unidades_instaladas`;
   - CRUD de `colaboradores` e `terceirizados` reunido na tela Pessoas;
+  - administracao de usuarios Auth implementada na tela Usuarios;
+  - Edge Function `admin-users` implantada para operacoes privilegiadas;
   - menu de Clientes visivel apenas para gestor;
   - menu de Empresas visivel apenas para gestor;
   - criacao/edicao de cliente usando `public.clientes`;
@@ -51,6 +53,8 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - projetos vinculados aos contratos canonicos;
   - unidades vinculadas aos projetos e ao catalogo `status_unidade`;
   - pessoas operacionais mantidas em tabelas separadas, com soft-delete;
+  - gestor pode criar conta, alterar email, perfil, vinculo, status e senha temporaria;
+  - usuario autenticado pode alterar a propria senha;
   - inativacao/reativacao por soft-delete via `ativo`;
   - tecnico permanece bloqueado para escrita por RLS.
 

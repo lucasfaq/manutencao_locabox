@@ -133,6 +133,23 @@ export type Terceirizado = {
   ativo: boolean;
 };
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  emailConfirmedAt: string | null;
+  lastSignInAt: string | null;
+  createdAt: string;
+  bannedUntil: string | null;
+  profile: {
+    id: string;
+    nome: string;
+    perfil: "tecnico" | "gestor";
+    ativo: boolean;
+    id_colaborador: number | null;
+    updated_at: string;
+  } | null;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -688,6 +705,62 @@ export async function updateSupabaseTerceirizado(id: number, payload: Record<str
 export async function setSupabaseTerceirizadoAtivo(id: number, ativo: boolean): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.from("terceirizados").update({ ativo }).eq("id_terceira", id);
+  if (error) throw error;
+}
+
+async function invokeAdminUsers<T>(body: Record<string, unknown>): Promise<T> {
+  const client = requireSupabase();
+  const { data, error } = await client.functions.invoke("admin-users", { body });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as T;
+}
+
+export async function loadAdminUsers(): Promise<AdminUser[]> {
+  const data = await invokeAdminUsers<{ users: AdminUser[] }>({ action: "list" });
+  return data.users;
+}
+
+export async function createAdminUser(payload: Record<string, FormDataEntryValue>): Promise<void> {
+  await invokeAdminUsers({
+    action: "create",
+    nome: String(payload.nome || ""),
+    email: String(payload.email || ""),
+    password: String(payload.password || ""),
+    perfil: String(payload.perfil || "tecnico"),
+    idColaborador: String(payload.idColaborador || "") || null
+  });
+}
+
+export async function updateAdminUser(
+  user: AdminUser,
+  payload: Record<string, FormDataEntryValue>
+): Promise<void> {
+  const nome = String(payload.nome || "");
+  const email = String(payload.email || "").trim().toLowerCase();
+  const password = String(payload.password || "");
+
+  await invokeAdminUsers({
+    action: "update_access",
+    userId: user.id,
+    nome,
+    perfil: String(payload.perfil || "tecnico"),
+    ativo: payload.ativo === "on",
+    idColaborador: String(payload.idColaborador || "") || null
+  });
+
+  if (email && email !== user.email.toLowerCase()) {
+    await invokeAdminUsers({ action: "update_email", userId: user.id, email });
+  }
+
+  if (password) {
+    await invokeAdminUsers({ action: "set_password", userId: user.id, password });
+  }
+}
+
+export async function updateOwnPassword(password: string): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.auth.updateUser({ password });
   if (error) throw error;
 }
 

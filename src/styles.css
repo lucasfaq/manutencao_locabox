@@ -351,6 +351,10 @@ main {
   align-items: start;
 }
 
+.account-password-panel {
+  margin-top: 18px;
+}
+
 .panel {
   padding: 18px;
 }
