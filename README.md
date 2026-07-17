@@ -90,6 +90,8 @@ A Fase 1 canonica adiciona as tabelas do fluxo Contratos -> Projetos -> Unidades
 
 As tabelas MVP antigas (`unidades`, `ordens`, `atendimentos`, `estoque`) permanecem temporariamente para compatibilidade do frontend atual. A Fase 2 deve migrar as telas de cadastros para as tabelas canonicas.
 
+Cadastros canonicos ja migrados no frontend: `clientes` e `empresas`, ambos restritos a gestores e com inativacao logica.
+
 ## GitHub
 
 Repositorio alvo:

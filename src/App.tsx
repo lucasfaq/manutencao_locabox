@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BarChart3,
+  Building2,
   Boxes,
   CalendarClock,
   CheckCircle2,
@@ -25,26 +26,31 @@ import {
   Bootstrap,
   Cliente,
   createSupabaseCliente,
+  createSupabaseEmpresa,
   createSupabaseAtendimento,
   createSupabaseOrdem,
   getCurrentSession,
   hasSupabaseConfig,
+  Empresa,
   loadPerfil,
   loadSupabaseClientes,
+  loadSupabaseEmpresas,
   loadSupabaseBootstrap,
   Ordem,
   PerfilUsuario,
   Session,
   setSupabaseClienteAtivo,
+  setSupabaseEmpresaAtivo,
   signInWithPassword,
   signOut,
   supabase,
   updateSupabaseCliente,
+  updateSupabaseEmpresa,
   Unidade,
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -57,6 +63,7 @@ const initialData: Bootstrap = {
 const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard }> = [
   { page: "dashboard", label: "Painel", icon: LayoutDashboard },
   { page: "clientes", label: "Clientes", icon: UserRound },
+  { page: "empresas", label: "Empresas", icon: Building2 },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
@@ -111,10 +118,12 @@ export function App() {
   const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => isGestor || (item.page !== "clientes" && item.page !== "relatorios")),
+    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "relatorios"].includes(item.page))),
     [isGestor]
   );
 
@@ -150,6 +159,16 @@ export function App() {
     }
 
     setClientes(await loadSupabaseClientes());
+  }
+
+  async function loadEmpresas() {
+    if (!hasSupabaseConfig || !isGestor) {
+      setEmpresas([]);
+      setSelectedEmpresa(null);
+      return;
+    }
+
+    setEmpresas(await loadSupabaseEmpresas());
   }
 
   useEffect(() => {
@@ -200,13 +219,14 @@ export function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if (page === "clientes" && !isGestor) {
+    if ((page === "clientes" || page === "empresas") && !isGestor) {
       setPage("dashboard");
     }
   }, [isGestor, page]);
 
   useEffect(() => {
     loadClientes().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar clientes."));
+    loadEmpresas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar empresas."));
   }, [isGestor, session?.access_token]);
 
   const filteredOrdens = useMemo(() => {
@@ -231,6 +251,17 @@ export function App() {
         .includes(text)
     );
   }, [clientes, query]);
+
+  const filteredEmpresas = useMemo(() => {
+    const text = query.toLowerCase();
+    return empresas.filter((empresa) =>
+      [empresa.razaoSocial, empresa.nomeFantasia, empresa.cnpj, empresa.ativo ? "ativo" : "inativo"]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(text)
+    );
+  }, [empresas, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -267,6 +298,43 @@ export function App() {
       await loadClientes();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do cliente.");
+    }
+  }
+
+  async function submitEmpresa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+
+    try {
+      if (selectedEmpresa) {
+        await updateSupabaseEmpresa(selectedEmpresa.idEmpresa, payload);
+      } else {
+        await createSupabaseEmpresa(payload);
+      }
+      setSelectedEmpresa(null);
+      formElement.reset();
+      await loadEmpresas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar empresa.");
+    }
+  }
+
+  async function toggleEmpresaAtivo(empresa: Empresa) {
+    const nextAtivo = !empresa.ativo;
+    const action = nextAtivo ? "reativar" : "inativar";
+    if (!window.confirm(`Confirmar ${action} empresa ${empresa.nomeFantasia || empresa.razaoSocial}?`)) return;
+
+    setErrorMessage("");
+    try {
+      await setSupabaseEmpresaAtivo(empresa.idEmpresa, nextAtivo);
+      if (selectedEmpresa?.idEmpresa === empresa.idEmpresa) {
+        setSelectedEmpresa({ ...empresa, ativo: nextAtivo });
+      }
+      await loadEmpresas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status da empresa.");
     }
   }
 
@@ -569,6 +637,65 @@ export function App() {
                 {selectedCliente && <button onClick={() => setSelectedCliente(null)}>Novo</button>}
               </div>
               <ClienteForm cliente={selectedCliente} onSubmit={submitCliente} />
+            </section>
+          </section>
+        )}
+
+        {page === "empresas" && isGestor && (
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading">
+                <h2>Empresas</h2>
+                <span>{filteredEmpresas.length} registros</span>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Empresa</th>
+                      <th>CNPJ</th>
+                      <th>Status</th>
+                      <th>Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEmpresas.map((empresa) => (
+                      <tr key={empresa.idEmpresa}>
+                        <td>
+                          <strong>{empresa.nomeFantasia || empresa.razaoSocial}</strong>
+                          <small>{empresa.nomeFantasia ? empresa.razaoSocial : "Nome fantasia nao informado"}</small>
+                        </td>
+                        <td>{empresa.cnpj}</td>
+                        <td><StatusPill value={empresa.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td>
+                          <div className="row-actions">
+                            <button className="icon-button" title="Editar empresa" onClick={() => setSelectedEmpresa(empresa)}>
+                              <Edit3 size={16} />
+                            </button>
+                            <button className="icon-button" title={empresa.ativo ? "Inativar empresa" : "Reativar empresa"} onClick={() => toggleEmpresaAtivo(empresa)}>
+                              <Power size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!filteredEmpresas.length && (
+                      <tr>
+                        <td colSpan={4}>
+                          <span className="empty-state">Nenhuma empresa encontrada.</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>{selectedEmpresa ? "Editar empresa" : "Nova empresa"}</h2>
+                {selectedEmpresa && <button onClick={() => setSelectedEmpresa(null)}>Nova</button>}
+              </div>
+              <EmpresaForm empresa={selectedEmpresa} onSubmit={submitEmpresa} />
             </section>
           </section>
         )}
@@ -892,6 +1019,33 @@ function ClienteForm({ cliente, onSubmit }: { cliente: Cliente | null; onSubmit:
       <button className="primary-button">
         <CheckCircle2 size={16} />
         {cliente ? "Salvar cliente" : "Criar cliente"}
+      </button>
+    </form>
+  );
+}
+
+function EmpresaForm({ empresa, onSubmit }: { empresa: Empresa | null; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form key={empresa?.idEmpresa || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">
+        Razao social
+        <input name="razaoSocial" defaultValue={empresa?.razaoSocial || ""} required maxLength={200} />
+      </label>
+      <label className="wide">
+        Nome fantasia
+        <input name="nomeFantasia" defaultValue={empresa?.nomeFantasia || ""} maxLength={160} />
+      </label>
+      <label className="wide">
+        CNPJ
+        <input name="cnpj" defaultValue={empresa?.cnpj || ""} required maxLength={40} />
+      </label>
+      <label className="checkbox-field wide">
+        <input name="ativo" type="checkbox" defaultChecked={empresa?.ativo ?? true} />
+        <span>Ativa</span>
+      </label>
+      <button className="primary-button">
+        <CheckCircle2 size={16} />
+        {empresa ? "Salvar empresa" : "Criar empresa"}
       </button>
     </form>
   );

@@ -65,6 +65,16 @@ export type Cliente = {
   atualizadoEm: string;
 };
 
+export type Empresa = {
+  idEmpresa: number;
+  razaoSocial: string;
+  nomeFantasia: string;
+  cnpj: string;
+  ativo: boolean;
+  criadoEm: string;
+  atualizadoEm: string;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -254,6 +264,76 @@ export async function setSupabaseClienteAtivo(idCliente: number, ativo: boolean)
     .from("clientes")
     .update({ ativo })
     .eq("id_cliente", idCliente);
+
+  if (error) throw error;
+}
+
+function mapEmpresa(row: any): Empresa {
+  return {
+    idEmpresa: Number(row.id_empresa),
+    razaoSocial: row.razao_social,
+    nomeFantasia: row.nome_fantasia || "",
+    cnpj: row.cnpj,
+    ativo: Boolean(row.ativo),
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em
+  };
+}
+
+const empresaFields = "id_empresa, razao_social, nome_fantasia, cnpj, ativo, criado_em, atualizado_em";
+
+export async function loadSupabaseEmpresas(): Promise<Empresa[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("empresas")
+    .select(empresaFields)
+    .order("ativo", { ascending: false })
+    .order("razao_social");
+
+  if (error) throw error;
+  return (data || []).map(mapEmpresa);
+}
+
+function empresaPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    razao_social: String(payload.razaoSocial || "").trim(),
+    nome_fantasia: String(payload.nomeFantasia || "").trim() || null,
+    cnpj: String(payload.cnpj || "").trim(),
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseEmpresa(payload: Record<string, FormDataEntryValue>): Promise<Empresa> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("empresas")
+    .insert(empresaPayload(payload))
+    .select(empresaFields)
+    .single();
+
+  if (error) throw error;
+  return mapEmpresa(data);
+}
+
+export async function updateSupabaseEmpresa(idEmpresa: number, payload: Record<string, FormDataEntryValue>): Promise<Empresa> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("empresas")
+    .update(empresaPayload(payload))
+    .eq("id_empresa", idEmpresa)
+    .select(empresaFields)
+    .single();
+
+  if (error) throw error;
+  return mapEmpresa(data);
+}
+
+export async function setSupabaseEmpresaAtivo(idEmpresa: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client
+    .from("empresas")
+    .update({ ativo })
+    .eq("id_empresa", idEmpresa);
 
   if (error) throw error;
 }

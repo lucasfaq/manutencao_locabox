@@ -38,8 +38,11 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - advisors de seguranca sem alertas de SQL/RLS, restando apenas configuracao de dashboard de senha vazada.
 - Fase 2 iniciada em 2026-07-02:
   - CRUD de `clientes` implementado no frontend;
+  - CRUD de `empresas` implementado no frontend;
   - menu de Clientes visivel apenas para gestor;
+  - menu de Empresas visivel apenas para gestor;
   - criacao/edicao de cliente usando `public.clientes`;
+  - criacao/edicao de empresa usando `public.empresas`;
   - inativacao/reativacao por soft-delete via `ativo`;
   - tecnico permanece bloqueado para escrita por RLS.
 
@@ -118,8 +121,8 @@ Avaliacao: o prompt esta correto como direcao, mas deve ser aplicado de forma in
 Continuar Fase 2 - Cadastros base, migrando o frontend para o schema canonico nesta ordem:
 
 1. Clientes - concluido.
-2. Empresas - proximo.
-3. Contratos.
+2. Empresas - concluido.
+3. Contratos - proximo.
 4. Projetos.
 5. Unidades instaladas.
 6. Colaboradores e terceirizados.

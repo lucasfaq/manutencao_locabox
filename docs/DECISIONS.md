@@ -17,3 +17,4 @@
 | 2026-07-02 | A view `vw_atendimentos_por_projeto` usa `security_invoker` e filtro de gestor | Relatorios sao restritos a gestor e continuam respeitando RLS nas tabelas base |
 | 2026-07-02 | Fase 2 deve migrar um cadastro por commit, comecando por `clientes` | Mantem rastreabilidade e evita misturar dependencias de cadastros base |
 | 2026-07-02 | Exclusao de cliente no app sera soft-delete via `ativo`, sem DELETE fisico | Preserva historico e segue a regra de entidades operacionais com `RESTRICT` |
+| 2026-07-17 | Cadastro de empresas segue o ciclo governado de clientes, com inativacao logica e sem DELETE | Preserva referencias futuras de contratos e mantem cada cadastro da Fase 2 em commit isolado |
