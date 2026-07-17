@@ -25,7 +25,9 @@ import {
   Atendimento,
   Bootstrap,
   Cliente,
+  Contrato,
   createSupabaseCliente,
+  createSupabaseContrato,
   createSupabaseEmpresa,
   createSupabaseAtendimento,
   createSupabaseOrdem,
@@ -34,23 +36,28 @@ import {
   Empresa,
   loadPerfil,
   loadSupabaseClientes,
+  loadSupabaseContratos,
   loadSupabaseEmpresas,
   loadSupabaseBootstrap,
+  loadStatusContratos,
   Ordem,
   PerfilUsuario,
   Session,
+  StatusCatalogo,
   setSupabaseClienteAtivo,
+  setSupabaseContratoAtivo,
   setSupabaseEmpresaAtivo,
   signInWithPassword,
   signOut,
   supabase,
   updateSupabaseCliente,
+  updateSupabaseContrato,
   updateSupabaseEmpresa,
   Unidade,
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "empresas" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -64,6 +71,7 @@ const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard 
   { page: "dashboard", label: "Painel", icon: LayoutDashboard },
   { page: "clientes", label: "Clientes", icon: UserRound },
   { page: "empresas", label: "Empresas", icon: Building2 },
+  { page: "contratos", label: "Contratos", icon: ClipboardList },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
@@ -120,10 +128,13 @@ export function App() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
+  const [contratos, setContratos] = useState<Contrato[]>([]);
+  const [statusContratos, setStatusContratos] = useState<StatusCatalogo[]>([]);
+  const [selectedContrato, setSelectedContrato] = useState<Contrato | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "relatorios"].includes(item.page))),
+    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "relatorios"].includes(item.page))),
     [isGestor]
   );
 
@@ -169,6 +180,19 @@ export function App() {
     }
 
     setEmpresas(await loadSupabaseEmpresas());
+  }
+
+  async function loadContratos() {
+    if (!hasSupabaseConfig || !isGestor) {
+      setContratos([]);
+      setStatusContratos([]);
+      setSelectedContrato(null);
+      return;
+    }
+
+    const [nextContratos, nextStatus] = await Promise.all([loadSupabaseContratos(), loadStatusContratos()]);
+    setContratos(nextContratos);
+    setStatusContratos(nextStatus);
   }
 
   useEffect(() => {
@@ -219,7 +243,7 @@ export function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if ((page === "clientes" || page === "empresas") && !isGestor) {
+    if ((page === "clientes" || page === "empresas" || page === "contratos") && !isGestor) {
       setPage("dashboard");
     }
   }, [isGestor, page]);
@@ -227,6 +251,7 @@ export function App() {
   useEffect(() => {
     loadClientes().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar clientes."));
     loadEmpresas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar empresas."));
+    loadContratos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar contratos."));
   }, [isGestor, session?.access_token]);
 
   const filteredOrdens = useMemo(() => {
@@ -262,6 +287,17 @@ export function App() {
         .includes(text)
     );
   }, [empresas, query]);
+
+  const filteredContratos = useMemo(() => {
+    const text = query.toLowerCase();
+    return contratos.filter((contrato) =>
+      [contrato.numeroContrato, contrato.clienteNome, contrato.empresaNome, contrato.objeto, contrato.statusCodigo, contrato.ativo ? "ativo" : "inativo"]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(text)
+    );
+  }, [contratos, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -335,6 +371,35 @@ export function App() {
       await loadEmpresas();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status da empresa.");
+    }
+  }
+
+  async function submitContrato(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedContrato) await updateSupabaseContrato(selectedContrato.idContrato, payload);
+      else await createSupabaseContrato(payload);
+      setSelectedContrato(null);
+      formElement.reset();
+      await loadContratos();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar contrato.");
+    }
+  }
+
+  async function toggleContratoAtivo(contrato: Contrato) {
+    const nextAtivo = !contrato.ativo;
+    if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} contrato ${contrato.numeroContrato}?`)) return;
+    setErrorMessage("");
+    try {
+      await setSupabaseContratoAtivo(contrato.idContrato, nextAtivo);
+      if (selectedContrato?.idContrato === contrato.idContrato) setSelectedContrato({ ...contrato, ativo: nextAtivo });
+      await loadContratos();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do contrato.");
     }
   }
 
@@ -700,6 +765,48 @@ export function App() {
           </section>
         )}
 
+        {page === "contratos" && isGestor && (
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading">
+                <h2>Contratos</h2>
+                <span>{filteredContratos.length} registros</span>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Contrato</th><th>Cliente / Empresa</th><th>Vigencia</th><th>Status</th><th>Acoes</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredContratos.map((contrato) => (
+                      <tr key={contrato.idContrato}>
+                        <td><strong>{contrato.numeroContrato}</strong><small>{contrato.objeto || "Objeto nao informado"}</small></td>
+                        <td>{contrato.clienteNome}<small>{contrato.empresaNome}</small></td>
+                        <td>{contrato.dataInicio || "—"} a {contrato.dataFim || "—"}</td>
+                        <td><StatusPill value={contrato.ativo ? contrato.statusCodigo : "Inativo"} /></td>
+                        <td>
+                          <div className="row-actions">
+                            <button className="icon-button" title="Editar contrato" onClick={() => setSelectedContrato(contrato)}><Edit3 size={16} /></button>
+                            <button className="icon-button" title={contrato.ativo ? "Inativar contrato" : "Reativar contrato"} onClick={() => toggleContratoAtivo(contrato)}><Power size={16} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!filteredContratos.length && <tr><td colSpan={5}><span className="empty-state">Nenhum contrato encontrado.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>{selectedContrato ? "Editar contrato" : "Novo contrato"}</h2>
+                {selectedContrato && <button onClick={() => setSelectedContrato(null)}>Novo</button>}
+              </div>
+              <ContratoForm contrato={selectedContrato} clientes={clientes} empresas={empresas} status={statusContratos} onSubmit={submitContrato} />
+            </section>
+          </section>
+        )}
+
         {page === "ordens" && (
           <section className="panel full">
             <div className="panel-heading">
@@ -1047,6 +1154,48 @@ function EmpresaForm({ empresa, onSubmit }: { empresa: Empresa | null; onSubmit:
         <CheckCircle2 size={16} />
         {empresa ? "Salvar empresa" : "Criar empresa"}
       </button>
+    </form>
+  );
+}
+
+function ContratoForm({
+  contrato, clientes, empresas, status, onSubmit
+}: {
+  contrato: Contrato | null;
+  clientes: Cliente[];
+  empresas: Empresa[];
+  status: StatusCatalogo[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={contrato?.idContrato || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Numero do contrato<input name="numeroContrato" defaultValue={contrato?.numeroContrato || ""} required maxLength={100} /></label>
+      <label className="wide">
+        Cliente
+        <select name="idCliente" defaultValue={contrato?.idCliente || ""} required>
+          <option value="">Selecione</option>
+          {clientes.map((cliente) => <option key={cliente.idCliente} value={cliente.idCliente}>{cliente.nome}</option>)}
+        </select>
+      </label>
+      <label className="wide">
+        Empresa
+        <select name="idEmpresa" defaultValue={contrato?.idEmpresa || ""} required>
+          <option value="">Selecione</option>
+          {empresas.map((empresa) => <option key={empresa.idEmpresa} value={empresa.idEmpresa}>{empresa.nomeFantasia || empresa.razaoSocial}</option>)}
+        </select>
+      </label>
+      <label className="wide">Objeto<textarea name="objeto" defaultValue={contrato?.objeto || ""} rows={3} /></label>
+      <label>
+        Status
+        <select name="statusCodigo" defaultValue={contrato?.statusCodigo || "ativo"} required>
+          {status.map((item) => <option key={item.codigo} value={item.codigo}>{item.descricao}</option>)}
+        </select>
+      </label>
+      <label>Valor total<input name="valorTotal" type="number" min="0" step="0.01" defaultValue={contrato?.valorTotal ?? ""} /></label>
+      <label>Inicio<input name="dataInicio" type="date" defaultValue={contrato?.dataInicio || ""} /></label>
+      <label>Fim<input name="dataFim" type="date" defaultValue={contrato?.dataFim || ""} /></label>
+      <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={contrato?.ativo ?? true} /><span>Ativo</span></label>
+      <button className="primary-button"><CheckCircle2 size={16} />{contrato ? "Salvar contrato" : "Criar contrato"}</button>
     </form>
   );
 }

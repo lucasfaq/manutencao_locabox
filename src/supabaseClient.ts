@@ -75,6 +75,26 @@ export type Empresa = {
   atualizadoEm: string;
 };
 
+export type Contrato = {
+  idContrato: number;
+  idCliente: number;
+  clienteNome: string;
+  idEmpresa: number;
+  empresaNome: string;
+  numeroContrato: string;
+  objeto: string;
+  statusCodigo: string;
+  dataInicio: string;
+  dataFim: string;
+  valorTotal: number | null;
+  ativo: boolean;
+};
+
+export type StatusCatalogo = {
+  codigo: string;
+  descricao: string;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -335,6 +355,84 @@ export async function setSupabaseEmpresaAtivo(idEmpresa: number, ativo: boolean)
     .update({ ativo })
     .eq("id_empresa", idEmpresa);
 
+  if (error) throw error;
+}
+
+function mapContrato(row: any): Contrato {
+  return {
+    idContrato: Number(row.id_contrato),
+    idCliente: Number(row.id_cliente),
+    clienteNome: row.clientes?.nome || "",
+    idEmpresa: Number(row.id_empresa),
+    empresaNome: row.empresas?.nome_fantasia || row.empresas?.razao_social || "",
+    numeroContrato: row.numero_contrato,
+    objeto: row.objeto || "",
+    statusCodigo: row.status_codigo,
+    dataInicio: row.data_inicio || "",
+    dataFim: row.data_fim || "",
+    valorTotal: row.valor_total === null ? null : Number(row.valor_total),
+    ativo: Boolean(row.ativo)
+  };
+}
+
+const contratoFields = "id_contrato, id_cliente, id_empresa, numero_contrato, objeto, status_codigo, data_inicio, data_fim, valor_total, ativo, clientes(nome), empresas(razao_social, nome_fantasia)";
+
+export async function loadSupabaseContratos(): Promise<Contrato[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("contratos")
+    .select(contratoFields)
+    .order("ativo", { ascending: false })
+    .order("numero_contrato");
+
+  if (error) throw error;
+  return (data || []).map(mapContrato);
+}
+
+export async function loadStatusContratos(): Promise<StatusCatalogo[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("status_contrato").select("codigo, descricao").order("ordem");
+  if (error) throw error;
+  return data || [];
+}
+
+function contratoPayload(payload: Record<string, FormDataEntryValue>) {
+  const valor = String(payload.valorTotal || "").trim();
+  return {
+    id_cliente: Number(payload.idCliente),
+    id_empresa: Number(payload.idEmpresa),
+    numero_contrato: String(payload.numeroContrato || "").trim(),
+    objeto: String(payload.objeto || "").trim(),
+    status_codigo: String(payload.statusCodigo || "ativo"),
+    data_inicio: String(payload.dataInicio || "").trim() || null,
+    data_fim: String(payload.dataFim || "").trim() || null,
+    valor_total: valor ? Number(valor) : null,
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseContrato(payload: Record<string, FormDataEntryValue>): Promise<Contrato> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("contratos").insert(contratoPayload(payload)).select(contratoFields).single();
+  if (error) throw error;
+  return mapContrato(data);
+}
+
+export async function updateSupabaseContrato(idContrato: number, payload: Record<string, FormDataEntryValue>): Promise<Contrato> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("contratos")
+    .update(contratoPayload(payload))
+    .eq("id_contrato", idContrato)
+    .select(contratoFields)
+    .single();
+  if (error) throw error;
+  return mapContrato(data);
+}
+
+export async function setSupabaseContratoAtivo(idContrato: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("contratos").update({ ativo }).eq("id_contrato", idContrato);
   if (error) throw error;
 }
 

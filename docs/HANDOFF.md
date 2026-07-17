@@ -39,10 +39,12 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
 - Fase 2 iniciada em 2026-07-02:
   - CRUD de `clientes` implementado no frontend;
   - CRUD de `empresas` implementado no frontend;
+  - CRUD de `contratos` implementado no frontend;
   - menu de Clientes visivel apenas para gestor;
   - menu de Empresas visivel apenas para gestor;
   - criacao/edicao de cliente usando `public.clientes`;
   - criacao/edicao de empresa usando `public.empresas`;
+  - contratos vinculados aos cadastros canonicos de clientes e empresas;
   - inativacao/reativacao por soft-delete via `ativo`;
   - tecnico permanece bloqueado para escrita por RLS.
 
@@ -122,8 +124,8 @@ Continuar Fase 2 - Cadastros base, migrando o frontend para o schema canonico ne
 
 1. Clientes - concluido.
 2. Empresas - concluido.
-3. Contratos - proximo.
-4. Projetos.
+3. Contratos - concluido.
+4. Projetos - proximo.
 5. Unidades instaladas.
 6. Colaboradores e terceirizados.
 7. Equipes.
