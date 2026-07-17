@@ -1336,9 +1336,17 @@ export function App() {
                     {unitFilterOptions.ruas.map((value) => <option key={value}>{value}</option>)}
                   </select>
                 </label>
-                <button type="button" onClick={() => {
+                <button
+                  type="button"
+                  className="clear-filters-button"
+                  disabled={!unitEstadoFilter && !unitCidadeFilter && !unitBairroFilter && !unitRuaFilter}
+                  onClick={() => {
                   setUnitEstadoFilter(""); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
-                }}>Limpar filtros</button>
+                  }}
+                >
+                  <RefreshCw size={15} />
+                  Limpar filtros
+                </button>
               </div>
               <div className="table-wrap">
                 <table>

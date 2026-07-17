@@ -1,1 +1,0 @@
-create index if not exists idx_atendimentos_executados_id_atendimento on public.atendimentos_executados(id_atendimento); create index if not exists idx_atendimentos_executados_id_pendencia_ordem on public.atendimentos_executados(id_pendencia_ordem);;
