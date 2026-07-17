@@ -111,6 +111,11 @@ export type UnidadeInstalada = {
   projetoNome: string;
   codigo: string;
   nome: string;
+  estado: string;
+  cidade: string;
+  bairro: string;
+  rua: string;
+  googleMapsUrl: string;
   statusCodigo: string;
   ativo: boolean;
 };
@@ -553,7 +558,7 @@ export async function setSupabaseProjetoAtivo(idProjeto: number, ativo: boolean)
   if (error) throw error;
 }
 
-const unidadeInstaladaFields = "id_unidade, id_projeto, codigo, nome, status_codigo, ativo, projetos(nome)";
+const unidadeInstaladaFields = "id_unidade, id_projeto, codigo, nome, estado, cidade, bairro, rua, google_maps_url, status_codigo, ativo, projetos(nome)";
 
 function mapUnidadeInstalada(row: any): UnidadeInstalada {
   return {
@@ -562,6 +567,11 @@ function mapUnidadeInstalada(row: any): UnidadeInstalada {
     projetoNome: row.projetos?.nome || "",
     codigo: row.codigo,
     nome: row.nome,
+    estado: row.estado || "",
+    cidade: row.cidade || "",
+    bairro: row.bairro || "",
+    rua: row.rua || "",
+    googleMapsUrl: row.google_maps_url || "",
     statusCodigo: row.status_codigo,
     ativo: Boolean(row.ativo)
   };
@@ -590,6 +600,11 @@ function unidadeInstaladaPayload(payload: Record<string, FormDataEntryValue>) {
     id_projeto: Number(payload.idProjeto),
     codigo: String(payload.codigo || "").trim(),
     nome: String(payload.nome || "").trim(),
+    estado: String(payload.estado || "").trim(),
+    cidade: String(payload.cidade || "").trim(),
+    bairro: String(payload.bairro || "").trim(),
+    rua: String(payload.rua || "").trim(),
+    google_maps_url: String(payload.googleMapsUrl || "").trim(),
     status_codigo: String(payload.statusCodigo || "instalada"),
     ativo: payload.ativo === "on"
   };

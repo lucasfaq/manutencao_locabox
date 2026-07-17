@@ -498,6 +498,41 @@ main {
   justify-self: start;
 }
 
+.unit-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.unit-filters label {
+  display: grid;
+  gap: 6px;
+  color: #55655c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.unit-filters select {
+  min-width: 0;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  padding: 10px 11px;
+  color: #17211c;
+  background: #fbfcfa;
+}
+
+.unit-filters button {
+  min-height: 38px;
+}
+
+.map-link {
+  color: #166534;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .table-wrap {
   overflow: auto;
 }
@@ -702,7 +737,8 @@ td small {
   .unit-grid,
   .inventory-grid,
   .reports-grid,
-  .form-grid {
+  .form-grid,
+  .unit-filters {
     grid-template-columns: 1fr;
   }
 

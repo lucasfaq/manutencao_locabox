@@ -170,6 +170,10 @@ export function App() {
   const [unidadesInstaladas, setUnidadesInstaladas] = useState<UnidadeInstalada[]>([]);
   const [statusUnidades, setStatusUnidades] = useState<StatusCatalogo[]>([]);
   const [selectedUnidadeInstalada, setSelectedUnidadeInstalada] = useState<UnidadeInstalada | null>(null);
+  const [unitEstadoFilter, setUnitEstadoFilter] = useState("");
+  const [unitCidadeFilter, setUnitCidadeFilter] = useState("");
+  const [unitBairroFilter, setUnitBairroFilter] = useState("");
+  const [unitRuaFilter, setUnitRuaFilter] = useState("");
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [terceirizados, setTerceirizados] = useState<Terceirizado[]>([]);
   const [selectedColaborador, setSelectedColaborador] = useState<Colaborador | null>(null);
@@ -416,10 +420,31 @@ export function App() {
 
   const filteredUnidadesInstaladas = useMemo(() => {
     const text = query.toLowerCase();
-    return unidadesInstaladas.filter((unidade) =>
-      [unidade.codigo, unidade.nome, unidade.projetoNome, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"].join(" ").toLowerCase().includes(text)
-    );
-  }, [unidadesInstaladas, query]);
+    return unidadesInstaladas.filter((unidade) => {
+      const matchesText = [
+        unidade.codigo, unidade.nome, unidade.projetoNome, unidade.estado, unidade.cidade,
+        unidade.bairro, unidade.rua, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"
+      ].join(" ").toLowerCase().includes(text);
+      return matchesText
+        && (!unitEstadoFilter || unidade.estado === unitEstadoFilter)
+        && (!unitCidadeFilter || unidade.cidade === unitCidadeFilter)
+        && (!unitBairroFilter || unidade.bairro === unitBairroFilter)
+        && (!unitRuaFilter || unidade.rua === unitRuaFilter);
+    });
+  }, [unidadesInstaladas, query, unitEstadoFilter, unitCidadeFilter, unitBairroFilter, unitRuaFilter]);
+
+  const unitFilterOptions = useMemo(() => {
+    const unique = (values: string[]) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const byEstado = unidadesInstaladas.filter((item) => !unitEstadoFilter || item.estado === unitEstadoFilter);
+    const byCidade = byEstado.filter((item) => !unitCidadeFilter || item.cidade === unitCidadeFilter);
+    const byBairro = byCidade.filter((item) => !unitBairroFilter || item.bairro === unitBairroFilter);
+    return {
+      estados: unique(unidadesInstaladas.map((item) => item.estado)),
+      cidades: unique(byEstado.map((item) => item.cidade)),
+      bairros: unique(byCidade.map((item) => item.bairro)),
+      ruas: unique(byBairro.map((item) => item.rua))
+    };
+  }, [unidadesInstaladas, unitEstadoFilter, unitCidadeFilter, unitBairroFilter]);
 
   const filteredColaboradores = useMemo(() => {
     const text = query.toLowerCase();
@@ -1280,14 +1305,51 @@ export function App() {
           <section className={isGestor ? "two-columns catalog-layout" : "panel full"}>
             <section className="panel full">
               <div className="panel-heading"><h2>Unidades instaladas</h2><span>{filteredUnidadesInstaladas.length} registros</span></div>
+              <div className="unit-filters">
+                <label>Estado
+                  <select value={unitEstadoFilter} onChange={(event) => {
+                    setUnitEstadoFilter(event.target.value); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
+                  }}>
+                    <option value="">Todos</option>
+                    {unitFilterOptions.estados.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Cidade
+                  <select value={unitCidadeFilter} onChange={(event) => {
+                    setUnitCidadeFilter(event.target.value); setUnitBairroFilter(""); setUnitRuaFilter("");
+                  }}>
+                    <option value="">Todas</option>
+                    {unitFilterOptions.cidades.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Bairro
+                  <select value={unitBairroFilter} onChange={(event) => {
+                    setUnitBairroFilter(event.target.value); setUnitRuaFilter("");
+                  }}>
+                    <option value="">Todos</option>
+                    {unitFilterOptions.bairros.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Rua
+                  <select value={unitRuaFilter} onChange={(event) => setUnitRuaFilter(event.target.value)}>
+                    <option value="">Todas</option>
+                    {unitFilterOptions.ruas.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={() => {
+                  setUnitEstadoFilter(""); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
+                }}>Limpar filtros</button>
+              </div>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Unidade</th><th>Projeto</th><th>Status</th>{isGestor && <th>Acoes</th>}</tr></thead>
+                  <thead><tr><th>Unidade</th><th>Projeto</th><th>Localizacao</th><th>Mapa</th><th>Status</th>{isGestor && <th>Acoes</th>}</tr></thead>
                   <tbody>
                     {filteredUnidadesInstaladas.map((unidade) => (
                       <tr key={unidade.idUnidade}>
                         <td><strong>{unidade.nome}</strong><small>{unidade.codigo}</small></td>
                         <td>{unidade.projetoNome}</td>
+                        <td><strong>{unidade.rua || "Endereco nao informado"}</strong><small>{[unidade.bairro, unidade.cidade, unidade.estado].filter(Boolean).join(" · ")}</small></td>
+                        <td>{unidade.googleMapsUrl ? <a className="map-link" href={unidade.googleMapsUrl} target="_blank" rel="noreferrer">Abrir mapa</a> : "—"}</td>
                         <td><StatusPill value={unidade.ativo ? unidade.statusCodigo : "Inativo"} /></td>
                         {isGestor && <td><div className="row-actions">
                           <button className="icon-button" title="Editar unidade" onClick={() => setSelectedUnidadeInstalada(unidade)}><Edit3 size={16} /></button>
@@ -1295,7 +1357,7 @@ export function App() {
                         </div></td>}
                       </tr>
                     ))}
-                    {!filteredUnidadesInstaladas.length && <tr><td colSpan={isGestor ? 4 : 3}><span className="empty-state">Nenhuma unidade instalada encontrada.</span></td></tr>}
+                    {!filteredUnidadesInstaladas.length && <tr><td colSpan={isGestor ? 6 : 5}><span className="empty-state">Nenhuma unidade instalada encontrada.</span></td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1674,6 +1736,11 @@ function UnidadeInstaladaForm({ unidade, projetos, status, onSubmit }: {
     <form key={unidade?.idUnidade || "new"} className="form-grid" onSubmit={onSubmit}>
       <label className="wide">Codigo<input name="codigo" defaultValue={unidade?.codigo || ""} required maxLength={80} /></label>
       <label className="wide">Nome<input name="nome" defaultValue={unidade?.nome || ""} required maxLength={160} /></label>
+      <label>Estado/UF<input name="estado" defaultValue={unidade?.estado || ""} required maxLength={60} /></label>
+      <label>Cidade<input name="cidade" defaultValue={unidade?.cidade || ""} required maxLength={120} /></label>
+      <label>Bairro<input name="bairro" defaultValue={unidade?.bairro || ""} required maxLength={120} /></label>
+      <label>Rua<input name="rua" defaultValue={unidade?.rua || ""} required maxLength={180} /></label>
+      <label className="wide">Link do Google Maps<input name="googleMapsUrl" type="url" defaultValue={unidade?.googleMapsUrl || ""} placeholder="https://maps.google.com/..." maxLength={500} /></label>
       <label className="wide">
         Projeto
         <select name="idProjeto" defaultValue={unidade?.idProjeto || ""} required>
