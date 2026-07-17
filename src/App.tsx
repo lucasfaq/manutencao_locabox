@@ -25,22 +25,27 @@ import {
   Atendimento,
   Bootstrap,
   Cliente,
+  Colaborador,
   Contrato,
   createSupabaseCliente,
+  createSupabaseColaborador,
   createSupabaseContrato,
   createSupabaseEmpresa,
   createSupabaseAtendimento,
   createSupabaseOrdem,
   createSupabaseProjeto,
+  createSupabaseTerceirizado,
   createSupabaseUnidadeInstalada,
   getCurrentSession,
   hasSupabaseConfig,
   Empresa,
   loadPerfil,
   loadSupabaseClientes,
+  loadSupabaseColaboradores,
   loadSupabaseContratos,
   loadSupabaseEmpresas,
   loadSupabaseProjetos,
+  loadSupabaseTerceirizados,
   loadSupabaseUnidadesInstaladas,
   loadSupabaseBootstrap,
   loadStatusContratos,
@@ -50,25 +55,30 @@ import {
   Projeto,
   Session,
   StatusCatalogo,
+  Terceirizado,
   setSupabaseClienteAtivo,
+  setSupabaseColaboradorAtivo,
   setSupabaseContratoAtivo,
   setSupabaseEmpresaAtivo,
   setSupabaseProjetoAtivo,
+  setSupabaseTerceirizadoAtivo,
   setSupabaseUnidadeInstaladaAtiva,
   signInWithPassword,
   signOut,
   supabase,
   updateSupabaseCliente,
+  updateSupabaseColaborador,
   updateSupabaseContrato,
   updateSupabaseEmpresa,
   updateSupabaseProjeto,
+  updateSupabaseTerceirizado,
   updateSupabaseUnidadeInstalada,
   Unidade,
   UnidadeInstalada,
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -84,6 +94,7 @@ const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard 
   { page: "empresas", label: "Empresas", icon: Building2 },
   { page: "contratos", label: "Contratos", icon: ClipboardList },
   { page: "projetos", label: "Projetos", icon: MapPin },
+  { page: "pessoas", label: "Pessoas", icon: UserRound },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
@@ -148,10 +159,14 @@ export function App() {
   const [unidadesInstaladas, setUnidadesInstaladas] = useState<UnidadeInstalada[]>([]);
   const [statusUnidades, setStatusUnidades] = useState<StatusCatalogo[]>([]);
   const [selectedUnidadeInstalada, setSelectedUnidadeInstalada] = useState<UnidadeInstalada | null>(null);
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  const [terceirizados, setTerceirizados] = useState<Terceirizado[]>([]);
+  const [selectedColaborador, setSelectedColaborador] = useState<Colaborador | null>(null);
+  const [selectedTerceirizado, setSelectedTerceirizado] = useState<Terceirizado | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "relatorios"].includes(item.page))),
+    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "relatorios"].includes(item.page))),
     [isGestor]
   );
 
@@ -233,6 +248,19 @@ export function App() {
     setStatusUnidades(nextStatus);
   }
 
+  async function loadPessoas() {
+    if (!hasSupabaseConfig || !isGestor) {
+      setColaboradores([]);
+      setTerceirizados([]);
+      setSelectedColaborador(null);
+      setSelectedTerceirizado(null);
+      return;
+    }
+    const [nextColaboradores, nextTerceirizados] = await Promise.all([loadSupabaseColaboradores(), loadSupabaseTerceirizados()]);
+    setColaboradores(nextColaboradores);
+    setTerceirizados(nextTerceirizados);
+  }
+
   useEffect(() => {
     if (!hasSupabaseConfig) {
       setAuthReady(true);
@@ -281,7 +309,7 @@ export function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos") && !isGestor) {
+    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos" || page === "pessoas") && !isGestor) {
       setPage("dashboard");
     }
   }, [isGestor, page]);
@@ -292,6 +320,7 @@ export function App() {
     loadContratos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar contratos."));
     loadProjetos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar projetos."));
     loadUnidadesInstaladas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar unidades instaladas."));
+    loadPessoas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar pessoas."));
   }, [isGestor, session?.access_token]);
 
   const filteredOrdens = useMemo(() => {
@@ -352,6 +381,16 @@ export function App() {
       [unidade.codigo, unidade.nome, unidade.projetoNome, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"].join(" ").toLowerCase().includes(text)
     );
   }, [unidadesInstaladas, query]);
+
+  const filteredColaboradores = useMemo(() => {
+    const text = query.toLowerCase();
+    return colaboradores.filter((item) => [item.nome, item.cargo, item.email, item.telefone].join(" ").toLowerCase().includes(text));
+  }, [colaboradores, query]);
+
+  const filteredTerceirizados = useMemo(() => {
+    const text = query.toLowerCase();
+    return terceirizados.filter((item) => [item.nome, item.empresa, item.documento, item.telefone].join(" ").toLowerCase().includes(text));
+  }, [terceirizados, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -512,6 +551,51 @@ export function App() {
       await loadUnidadesInstaladas();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status da unidade.");
+    }
+  }
+
+  async function submitColaborador(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedColaborador) await updateSupabaseColaborador(selectedColaborador.idColaborador, payload);
+      else await createSupabaseColaborador(payload);
+      setSelectedColaborador(null);
+      formElement.reset();
+      await loadPessoas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar colaborador.");
+    }
+  }
+
+  async function submitTerceirizado(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedTerceirizado) await updateSupabaseTerceirizado(selectedTerceirizado.idTerceira, payload);
+      else await createSupabaseTerceirizado(payload);
+      setSelectedTerceirizado(null);
+      formElement.reset();
+      await loadPessoas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar terceirizado.");
+    }
+  }
+
+  async function togglePessoaAtiva(tipo: "colaborador" | "terceirizado", id: number, nome: string, ativo: boolean) {
+    const nextAtivo = !ativo;
+    if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} ${nome}?`)) return;
+    setErrorMessage("");
+    try {
+      if (tipo === "colaborador") await setSupabaseColaboradorAtivo(id, nextAtivo);
+      else await setSupabaseTerceirizadoAtivo(id, nextAtivo);
+      await loadPessoas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status.");
     }
   }
 
@@ -947,6 +1031,57 @@ export function App() {
             <section className="panel">
               <div className="panel-heading"><h2>{selectedProjeto ? "Editar projeto" : "Novo projeto"}</h2>{selectedProjeto && <button onClick={() => setSelectedProjeto(null)}>Novo</button>}</div>
               <ProjetoForm projeto={selectedProjeto} contratos={contratos} onSubmit={submitProjeto} />
+            </section>
+          </section>
+        )}
+
+        {page === "pessoas" && isGestor && (
+          <section className="two-columns">
+            <section className="panel">
+              <div className="panel-heading"><h2>Colaboradores</h2><span>{filteredColaboradores.length} registros</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Nome</th><th>Status</th><th>Acoes</th></tr></thead>
+                  <tbody>
+                    {filteredColaboradores.map((item) => (
+                      <tr key={item.idColaborador}>
+                        <td><strong>{item.nome}</strong><small>{item.cargo || "Cargo nao informado"} · {item.telefone || "Sem telefone"}</small></td>
+                        <td><StatusPill value={item.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td><div className="row-actions">
+                          <button className="icon-button" title="Editar colaborador" onClick={() => setSelectedColaborador(item)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title={item.ativo ? "Inativar colaborador" : "Reativar colaborador"} onClick={() => togglePessoaAtiva("colaborador", item.idColaborador, item.nome, item.ativo)}><Power size={16} /></button>
+                        </div></td>
+                      </tr>
+                    ))}
+                    {!filteredColaboradores.length && <tr><td colSpan={3}><span className="empty-state">Nenhum colaborador encontrado.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="panel-heading"><h2>{selectedColaborador ? "Editar colaborador" : "Novo colaborador"}</h2>{selectedColaborador && <button onClick={() => setSelectedColaborador(null)}>Novo</button>}</div>
+              <ColaboradorForm colaborador={selectedColaborador} onSubmit={submitColaborador} />
+            </section>
+            <section className="panel">
+              <div className="panel-heading"><h2>Terceirizados</h2><span>{filteredTerceirizados.length} registros</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Nome</th><th>Status</th><th>Acoes</th></tr></thead>
+                  <tbody>
+                    {filteredTerceirizados.map((item) => (
+                      <tr key={item.idTerceira}>
+                        <td><strong>{item.nome}</strong><small>{item.empresa || "Empresa nao informada"} · {item.documento || "Sem documento"}</small></td>
+                        <td><StatusPill value={item.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td><div className="row-actions">
+                          <button className="icon-button" title="Editar terceirizado" onClick={() => setSelectedTerceirizado(item)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title={item.ativo ? "Inativar terceirizado" : "Reativar terceirizado"} onClick={() => togglePessoaAtiva("terceirizado", item.idTerceira, item.nome, item.ativo)}><Power size={16} /></button>
+                        </div></td>
+                      </tr>
+                    ))}
+                    {!filteredTerceirizados.length && <tr><td colSpan={3}><span className="empty-state">Nenhum terceirizado encontrado.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="panel-heading"><h2>{selectedTerceirizado ? "Editar terceirizado" : "Novo terceirizado"}</h2>{selectedTerceirizado && <button onClick={() => setSelectedTerceirizado(null)}>Novo</button>}</div>
+              <TerceirizadoForm terceirizado={selectedTerceirizado} onSubmit={submitTerceirizado} />
             </section>
           </section>
         )}
@@ -1401,6 +1536,38 @@ function UnidadeInstaladaForm({ unidade, projetos, status, onSubmit }: {
       </label>
       <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={unidade?.ativo ?? true} /><span>Ativa</span></label>
       <button className="primary-button"><CheckCircle2 size={16} />{unidade ? "Salvar unidade" : "Criar unidade"}</button>
+    </form>
+  );
+}
+
+function ColaboradorForm({ colaborador, onSubmit }: {
+  colaborador: Colaborador | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={colaborador?.idColaborador || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Nome<input name="nome" defaultValue={colaborador?.nome || ""} required maxLength={160} /></label>
+      <label className="wide">Cargo<input name="cargo" defaultValue={colaborador?.cargo || ""} maxLength={120} /></label>
+      <label className="wide">Email<input name="email" type="email" defaultValue={colaborador?.email || ""} maxLength={160} /></label>
+      <label className="wide">Telefone<input name="telefone" defaultValue={colaborador?.telefone || ""} maxLength={40} /></label>
+      <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={colaborador?.ativo ?? true} /><span>Ativo</span></label>
+      <button className="primary-button"><CheckCircle2 size={16} />{colaborador ? "Salvar colaborador" : "Criar colaborador"}</button>
+    </form>
+  );
+}
+
+function TerceirizadoForm({ terceirizado, onSubmit }: {
+  terceirizado: Terceirizado | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={terceirizado?.idTerceira || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Nome<input name="nome" defaultValue={terceirizado?.nome || ""} required maxLength={160} /></label>
+      <label className="wide">Empresa<input name="empresa" defaultValue={terceirizado?.empresa || ""} maxLength={160} /></label>
+      <label className="wide">Documento<input name="documento" defaultValue={terceirizado?.documento || ""} maxLength={60} /></label>
+      <label className="wide">Telefone<input name="telefone" defaultValue={terceirizado?.telefone || ""} maxLength={40} /></label>
+      <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={terceirizado?.ativo ?? true} /><span>Ativo</span></label>
+      <button className="primary-button"><CheckCircle2 size={16} />{terceirizado ? "Salvar terceirizado" : "Criar terceirizado"}</button>
     </form>
   );
 }

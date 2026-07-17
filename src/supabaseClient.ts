@@ -115,6 +115,24 @@ export type UnidadeInstalada = {
   ativo: boolean;
 };
 
+export type Colaborador = {
+  idColaborador: number;
+  nome: string;
+  cargo: string;
+  email: string;
+  telefone: string;
+  ativo: boolean;
+};
+
+export type Terceirizado = {
+  idTerceira: number;
+  nome: string;
+  empresa: string;
+  documento: string;
+  telefone: string;
+  ativo: boolean;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -571,6 +589,105 @@ export async function updateSupabaseUnidadeInstalada(idUnidade: number, payload:
 export async function setSupabaseUnidadeInstaladaAtiva(idUnidade: number, ativo: boolean): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.from("unidades_instaladas").update({ ativo }).eq("id_unidade", idUnidade);
+  if (error) throw error;
+}
+
+const colaboradorFields = "id_colaborador, nome, cargo, email, telefone, ativo";
+const terceirizadoFields = "id_terceira, nome, empresa, documento, telefone, ativo";
+
+function mapColaborador(row: any): Colaborador {
+  return {
+    idColaborador: Number(row.id_colaborador),
+    nome: row.nome,
+    cargo: row.cargo || "",
+    email: row.email || "",
+    telefone: row.telefone || "",
+    ativo: Boolean(row.ativo)
+  };
+}
+
+function mapTerceirizado(row: any): Terceirizado {
+  return {
+    idTerceira: Number(row.id_terceira),
+    nome: row.nome,
+    empresa: row.empresa || "",
+    documento: row.documento || "",
+    telefone: row.telefone || "",
+    ativo: Boolean(row.ativo)
+  };
+}
+
+export async function loadSupabaseColaboradores(): Promise<Colaborador[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("colaboradores").select(colaboradorFields).order("ativo", { ascending: false }).order("nome");
+  if (error) throw error;
+  return (data || []).map(mapColaborador);
+}
+
+export async function loadSupabaseTerceirizados(): Promise<Terceirizado[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("terceirizados").select(terceirizadoFields).order("ativo", { ascending: false }).order("nome");
+  if (error) throw error;
+  return (data || []).map(mapTerceirizado);
+}
+
+function colaboradorPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    nome: String(payload.nome || "").trim(),
+    cargo: String(payload.cargo || "").trim() || null,
+    email: String(payload.email || "").trim() || null,
+    telefone: String(payload.telefone || "").trim() || null,
+    ativo: payload.ativo === "on"
+  };
+}
+
+function terceirizadoPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    nome: String(payload.nome || "").trim(),
+    empresa: String(payload.empresa || "").trim() || null,
+    documento: String(payload.documento || "").trim() || null,
+    telefone: String(payload.telefone || "").trim() || null,
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseColaborador(payload: Record<string, FormDataEntryValue>): Promise<Colaborador> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("colaboradores").insert(colaboradorPayload(payload)).select(colaboradorFields).single();
+  if (error) throw error;
+  return mapColaborador(data);
+}
+
+export async function updateSupabaseColaborador(id: number, payload: Record<string, FormDataEntryValue>): Promise<Colaborador> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("colaboradores").update(colaboradorPayload(payload)).eq("id_colaborador", id).select(colaboradorFields).single();
+  if (error) throw error;
+  return mapColaborador(data);
+}
+
+export async function setSupabaseColaboradorAtivo(id: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("colaboradores").update({ ativo }).eq("id_colaborador", id);
+  if (error) throw error;
+}
+
+export async function createSupabaseTerceirizado(payload: Record<string, FormDataEntryValue>): Promise<Terceirizado> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("terceirizados").insert(terceirizadoPayload(payload)).select(terceirizadoFields).single();
+  if (error) throw error;
+  return mapTerceirizado(data);
+}
+
+export async function updateSupabaseTerceirizado(id: number, payload: Record<string, FormDataEntryValue>): Promise<Terceirizado> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("terceirizados").update(terceirizadoPayload(payload)).eq("id_terceira", id).select(terceirizadoFields).single();
+  if (error) throw error;
+  return mapTerceirizado(data);
+}
+
+export async function setSupabaseTerceirizadoAtivo(id: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("terceirizados").update({ ativo }).eq("id_terceira", id);
   if (error) throw error;
 }
 

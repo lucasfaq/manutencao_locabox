@@ -94,6 +94,8 @@ Cadastros canonicos ja migrados no frontend: `clientes`, `empresas`, `contratos`
 
 A tela de Unidades usa `unidades_instaladas`: leitura para usuarios autenticados e manutencao do cadastro por gestores.
 
+A tela Pessoas permite ao gestor administrar separadamente `colaboradores` e `terceirizados`, sem exclusao fisica.
+
 ## GitHub
 
 Repositorio alvo:
