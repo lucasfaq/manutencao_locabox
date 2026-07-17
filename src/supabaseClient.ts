@@ -95,6 +95,16 @@ export type StatusCatalogo = {
   descricao: string;
 };
 
+export type Projeto = {
+  idProjeto: number;
+  idContrato: number;
+  contratoNumero: string;
+  nome: string;
+  municipio: string;
+  uf: string;
+  ativo: boolean;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -433,6 +443,57 @@ export async function updateSupabaseContrato(idContrato: number, payload: Record
 export async function setSupabaseContratoAtivo(idContrato: number, ativo: boolean): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.from("contratos").update({ ativo }).eq("id_contrato", idContrato);
+  if (error) throw error;
+}
+
+const projetoFields = "id_projeto, id_contrato, nome, municipio, uf, ativo, contratos(numero_contrato)";
+
+function mapProjeto(row: any): Projeto {
+  return {
+    idProjeto: Number(row.id_projeto),
+    idContrato: Number(row.id_contrato),
+    contratoNumero: row.contratos?.numero_contrato || "",
+    nome: row.nome,
+    municipio: row.municipio || "",
+    uf: row.uf || "",
+    ativo: Boolean(row.ativo)
+  };
+}
+
+export async function loadSupabaseProjetos(): Promise<Projeto[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("projetos").select(projetoFields).order("ativo", { ascending: false }).order("nome");
+  if (error) throw error;
+  return (data || []).map(mapProjeto);
+}
+
+function projetoPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    id_contrato: Number(payload.idContrato),
+    nome: String(payload.nome || "").trim(),
+    municipio: String(payload.municipio || "").trim(),
+    uf: String(payload.uf || "").trim().toUpperCase(),
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseProjeto(payload: Record<string, FormDataEntryValue>): Promise<Projeto> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("projetos").insert(projetoPayload(payload)).select(projetoFields).single();
+  if (error) throw error;
+  return mapProjeto(data);
+}
+
+export async function updateSupabaseProjeto(idProjeto: number, payload: Record<string, FormDataEntryValue>): Promise<Projeto> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("projetos").update(projetoPayload(payload)).eq("id_projeto", idProjeto).select(projetoFields).single();
+  if (error) throw error;
+  return mapProjeto(data);
+}
+
+export async function setSupabaseProjetoAtivo(idProjeto: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("projetos").update({ ativo }).eq("id_projeto", idProjeto);
   if (error) throw error;
 }
 

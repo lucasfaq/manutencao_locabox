@@ -31,6 +31,7 @@ import {
   createSupabaseEmpresa,
   createSupabaseAtendimento,
   createSupabaseOrdem,
+  createSupabaseProjeto,
   getCurrentSession,
   hasSupabaseConfig,
   Empresa,
@@ -38,26 +39,30 @@ import {
   loadSupabaseClientes,
   loadSupabaseContratos,
   loadSupabaseEmpresas,
+  loadSupabaseProjetos,
   loadSupabaseBootstrap,
   loadStatusContratos,
   Ordem,
   PerfilUsuario,
+  Projeto,
   Session,
   StatusCatalogo,
   setSupabaseClienteAtivo,
   setSupabaseContratoAtivo,
   setSupabaseEmpresaAtivo,
+  setSupabaseProjetoAtivo,
   signInWithPassword,
   signOut,
   supabase,
   updateSupabaseCliente,
   updateSupabaseContrato,
   updateSupabaseEmpresa,
+  updateSupabaseProjeto,
   Unidade,
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "ordens" | "unidades" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -72,6 +77,7 @@ const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard 
   { page: "clientes", label: "Clientes", icon: UserRound },
   { page: "empresas", label: "Empresas", icon: Building2 },
   { page: "contratos", label: "Contratos", icon: ClipboardList },
+  { page: "projetos", label: "Projetos", icon: MapPin },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "atendimentos", label: "Atendimentos", icon: Wrench },
@@ -131,10 +137,12 @@ export function App() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [statusContratos, setStatusContratos] = useState<StatusCatalogo[]>([]);
   const [selectedContrato, setSelectedContrato] = useState<Contrato | null>(null);
+  const [projetos, setProjetos] = useState<Projeto[]>([]);
+  const [selectedProjeto, setSelectedProjeto] = useState<Projeto | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "relatorios"].includes(item.page))),
+    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "relatorios"].includes(item.page))),
     [isGestor]
   );
 
@@ -195,6 +203,15 @@ export function App() {
     setStatusContratos(nextStatus);
   }
 
+  async function loadProjetos() {
+    if (!hasSupabaseConfig || !isGestor) {
+      setProjetos([]);
+      setSelectedProjeto(null);
+      return;
+    }
+    setProjetos(await loadSupabaseProjetos());
+  }
+
   useEffect(() => {
     if (!hasSupabaseConfig) {
       setAuthReady(true);
@@ -243,7 +260,7 @@ export function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if ((page === "clientes" || page === "empresas" || page === "contratos") && !isGestor) {
+    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos") && !isGestor) {
       setPage("dashboard");
     }
   }, [isGestor, page]);
@@ -252,6 +269,7 @@ export function App() {
     loadClientes().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar clientes."));
     loadEmpresas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar empresas."));
     loadContratos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar contratos."));
+    loadProjetos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar projetos."));
   }, [isGestor, session?.access_token]);
 
   const filteredOrdens = useMemo(() => {
@@ -298,6 +316,13 @@ export function App() {
         .includes(text)
     );
   }, [contratos, query]);
+
+  const filteredProjetos = useMemo(() => {
+    const text = query.toLowerCase();
+    return projetos.filter((projeto) =>
+      [projeto.nome, projeto.contratoNumero, projeto.municipio, projeto.uf, projeto.ativo ? "ativo" : "inativo"].join(" ").toLowerCase().includes(text)
+    );
+  }, [projetos, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -400,6 +425,35 @@ export function App() {
       await loadContratos();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do contrato.");
+    }
+  }
+
+  async function submitProjeto(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedProjeto) await updateSupabaseProjeto(selectedProjeto.idProjeto, payload);
+      else await createSupabaseProjeto(payload);
+      setSelectedProjeto(null);
+      formElement.reset();
+      await loadProjetos();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar projeto.");
+    }
+  }
+
+  async function toggleProjetoAtivo(projeto: Projeto) {
+    const nextAtivo = !projeto.ativo;
+    if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} projeto ${projeto.nome}?`)) return;
+    setErrorMessage("");
+    try {
+      await setSupabaseProjetoAtivo(projeto.idProjeto, nextAtivo);
+      if (selectedProjeto?.idProjeto === projeto.idProjeto) setSelectedProjeto({ ...projeto, ativo: nextAtivo });
+      await loadProjetos();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do projeto.");
     }
   }
 
@@ -807,6 +861,38 @@ export function App() {
           </section>
         )}
 
+        {page === "projetos" && isGestor && (
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading"><h2>Projetos</h2><span>{filteredProjetos.length} registros</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Projeto</th><th>Contrato</th><th>Localidade</th><th>Status</th><th>Acoes</th></tr></thead>
+                  <tbody>
+                    {filteredProjetos.map((projeto) => (
+                      <tr key={projeto.idProjeto}>
+                        <td><strong>{projeto.nome}</strong></td>
+                        <td>{projeto.contratoNumero}</td>
+                        <td>{[projeto.municipio, projeto.uf].filter(Boolean).join(" / ") || "Nao informada"}</td>
+                        <td><StatusPill value={projeto.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td><div className="row-actions">
+                          <button className="icon-button" title="Editar projeto" onClick={() => setSelectedProjeto(projeto)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title={projeto.ativo ? "Inativar projeto" : "Reativar projeto"} onClick={() => toggleProjetoAtivo(projeto)}><Power size={16} /></button>
+                        </div></td>
+                      </tr>
+                    ))}
+                    {!filteredProjetos.length && <tr><td colSpan={5}><span className="empty-state">Nenhum projeto encontrado.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading"><h2>{selectedProjeto ? "Editar projeto" : "Novo projeto"}</h2>{selectedProjeto && <button onClick={() => setSelectedProjeto(null)}>Novo</button>}</div>
+              <ProjetoForm projeto={selectedProjeto} contratos={contratos} onSubmit={submitProjeto} />
+            </section>
+          </section>
+        )}
+
         {page === "ordens" && (
           <section className="panel full">
             <div className="panel-heading">
@@ -1196,6 +1282,29 @@ function ContratoForm({
       <label>Fim<input name="dataFim" type="date" defaultValue={contrato?.dataFim || ""} /></label>
       <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={contrato?.ativo ?? true} /><span>Ativo</span></label>
       <button className="primary-button"><CheckCircle2 size={16} />{contrato ? "Salvar contrato" : "Criar contrato"}</button>
+    </form>
+  );
+}
+
+function ProjetoForm({ projeto, contratos, onSubmit }: {
+  projeto: Projeto | null;
+  contratos: Contrato[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={projeto?.idProjeto || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Nome<input name="nome" defaultValue={projeto?.nome || ""} required maxLength={160} /></label>
+      <label className="wide">
+        Contrato
+        <select name="idContrato" defaultValue={projeto?.idContrato || ""} required>
+          <option value="">Selecione</option>
+          {contratos.map((contrato) => <option key={contrato.idContrato} value={contrato.idContrato}>{contrato.numeroContrato} — {contrato.clienteNome}</option>)}
+        </select>
+      </label>
+      <label>Municipio<input name="municipio" defaultValue={projeto?.municipio || ""} maxLength={120} /></label>
+      <label>UF<input name="uf" defaultValue={projeto?.uf || ""} maxLength={2} /></label>
+      <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={projeto?.ativo ?? true} /><span>Ativo</span></label>
+      <button className="primary-button"><CheckCircle2 size={16} />{projeto ? "Salvar projeto" : "Criar projeto"}</button>
     </form>
   );
 }

@@ -19,3 +19,4 @@
 | 2026-07-02 | Exclusao de cliente no app sera soft-delete via `ativo`, sem DELETE fisico | Preserva historico e segue a regra de entidades operacionais com `RESTRICT` |
 | 2026-07-17 | Cadastro de empresas segue o ciclo governado de clientes, com inativacao logica e sem DELETE | Preserva referencias futuras de contratos e mantem cada cadastro da Fase 2 em commit isolado |
 | 2026-07-17 | Contratos sao editados pelo gestor e vinculados obrigatoriamente a cliente e empresa canonicos | Mantem integridade referencial e prepara a hierarquia Contrato -> Projeto -> Unidade |
+| 2026-07-17 | Projetos pertencem obrigatoriamente a um contrato canonico | Preserva a hierarquia operacional usada por unidades, OS e relatorios |
