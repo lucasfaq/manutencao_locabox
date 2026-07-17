@@ -105,6 +105,16 @@ export type Projeto = {
   ativo: boolean;
 };
 
+export type UnidadeInstalada = {
+  idUnidade: number;
+  idProjeto: number;
+  projetoNome: string;
+  codigo: string;
+  nome: string;
+  statusCodigo: string;
+  ativo: boolean;
+};
+
 export type Bootstrap = {
   unidades: Unidade[];
   ordens: Ordem[];
@@ -494,6 +504,73 @@ export async function updateSupabaseProjeto(idProjeto: number, payload: Record<s
 export async function setSupabaseProjetoAtivo(idProjeto: number, ativo: boolean): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.from("projetos").update({ ativo }).eq("id_projeto", idProjeto);
+  if (error) throw error;
+}
+
+const unidadeInstaladaFields = "id_unidade, id_projeto, codigo, nome, status_codigo, ativo, projetos(nome)";
+
+function mapUnidadeInstalada(row: any): UnidadeInstalada {
+  return {
+    idUnidade: Number(row.id_unidade),
+    idProjeto: Number(row.id_projeto),
+    projetoNome: row.projetos?.nome || "",
+    codigo: row.codigo,
+    nome: row.nome,
+    statusCodigo: row.status_codigo,
+    ativo: Boolean(row.ativo)
+  };
+}
+
+export async function loadSupabaseUnidadesInstaladas(): Promise<UnidadeInstalada[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("unidades_instaladas")
+    .select(unidadeInstaladaFields)
+    .order("ativo", { ascending: false })
+    .order("nome");
+  if (error) throw error;
+  return (data || []).map(mapUnidadeInstalada);
+}
+
+export async function loadStatusUnidades(): Promise<StatusCatalogo[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("status_unidade").select("codigo, descricao").order("ordem");
+  if (error) throw error;
+  return data || [];
+}
+
+function unidadeInstaladaPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    id_projeto: Number(payload.idProjeto),
+    codigo: String(payload.codigo || "").trim(),
+    nome: String(payload.nome || "").trim(),
+    status_codigo: String(payload.statusCodigo || "instalada"),
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabaseUnidadeInstalada(payload: Record<string, FormDataEntryValue>): Promise<UnidadeInstalada> {
+  const client = requireSupabase();
+  const { data, error } = await client.from("unidades_instaladas").insert(unidadeInstaladaPayload(payload)).select(unidadeInstaladaFields).single();
+  if (error) throw error;
+  return mapUnidadeInstalada(data);
+}
+
+export async function updateSupabaseUnidadeInstalada(idUnidade: number, payload: Record<string, FormDataEntryValue>): Promise<UnidadeInstalada> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("unidades_instaladas")
+    .update(unidadeInstaladaPayload(payload))
+    .eq("id_unidade", idUnidade)
+    .select(unidadeInstaladaFields)
+    .single();
+  if (error) throw error;
+  return mapUnidadeInstalada(data);
+}
+
+export async function setSupabaseUnidadeInstaladaAtiva(idUnidade: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.from("unidades_instaladas").update({ ativo }).eq("id_unidade", idUnidade);
   if (error) throw error;
 }
 

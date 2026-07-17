@@ -20,3 +20,4 @@
 | 2026-07-17 | Cadastro de empresas segue o ciclo governado de clientes, com inativacao logica e sem DELETE | Preserva referencias futuras de contratos e mantem cada cadastro da Fase 2 em commit isolado |
 | 2026-07-17 | Contratos sao editados pelo gestor e vinculados obrigatoriamente a cliente e empresa canonicos | Mantem integridade referencial e prepara a hierarquia Contrato -> Projeto -> Unidade |
 | 2026-07-17 | Projetos pertencem obrigatoriamente a um contrato canonico | Preserva a hierarquia operacional usada por unidades, OS e relatorios |
+| 2026-07-17 | Unidades instaladas substituem a listagem legada na tela de Unidades; leitura e operacional, escrita e de gestor | Migra a interface sem retirar dos tecnicos a visibilidade necessaria para OS e atendimentos |

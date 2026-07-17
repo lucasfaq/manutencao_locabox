@@ -32,6 +32,7 @@ import {
   createSupabaseAtendimento,
   createSupabaseOrdem,
   createSupabaseProjeto,
+  createSupabaseUnidadeInstalada,
   getCurrentSession,
   hasSupabaseConfig,
   Empresa,
@@ -40,8 +41,10 @@ import {
   loadSupabaseContratos,
   loadSupabaseEmpresas,
   loadSupabaseProjetos,
+  loadSupabaseUnidadesInstaladas,
   loadSupabaseBootstrap,
   loadStatusContratos,
+  loadStatusUnidades,
   Ordem,
   PerfilUsuario,
   Projeto,
@@ -51,6 +54,7 @@ import {
   setSupabaseContratoAtivo,
   setSupabaseEmpresaAtivo,
   setSupabaseProjetoAtivo,
+  setSupabaseUnidadeInstaladaAtiva,
   signInWithPassword,
   signOut,
   supabase,
@@ -58,7 +62,9 @@ import {
   updateSupabaseContrato,
   updateSupabaseEmpresa,
   updateSupabaseProjeto,
+  updateSupabaseUnidadeInstalada,
   Unidade,
+  UnidadeInstalada,
   withMetrics
 } from "./supabaseClient";
 
@@ -139,6 +145,9 @@ export function App() {
   const [selectedContrato, setSelectedContrato] = useState<Contrato | null>(null);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [selectedProjeto, setSelectedProjeto] = useState<Projeto | null>(null);
+  const [unidadesInstaladas, setUnidadesInstaladas] = useState<UnidadeInstalada[]>([]);
+  const [statusUnidades, setStatusUnidades] = useState<StatusCatalogo[]>([]);
+  const [selectedUnidadeInstalada, setSelectedUnidadeInstalada] = useState<UnidadeInstalada | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
@@ -212,6 +221,18 @@ export function App() {
     setProjetos(await loadSupabaseProjetos());
   }
 
+  async function loadUnidadesInstaladas() {
+    if (!hasSupabaseConfig || !session) {
+      setUnidadesInstaladas([]);
+      setStatusUnidades([]);
+      setSelectedUnidadeInstalada(null);
+      return;
+    }
+    const [nextUnidades, nextStatus] = await Promise.all([loadSupabaseUnidadesInstaladas(), loadStatusUnidades()]);
+    setUnidadesInstaladas(nextUnidades);
+    setStatusUnidades(nextStatus);
+  }
+
   useEffect(() => {
     if (!hasSupabaseConfig) {
       setAuthReady(true);
@@ -270,6 +291,7 @@ export function App() {
     loadEmpresas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar empresas."));
     loadContratos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar contratos."));
     loadProjetos().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar projetos."));
+    loadUnidadesInstaladas().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar unidades instaladas."));
   }, [isGestor, session?.access_token]);
 
   const filteredOrdens = useMemo(() => {
@@ -323,6 +345,13 @@ export function App() {
       [projeto.nome, projeto.contratoNumero, projeto.municipio, projeto.uf, projeto.ativo ? "ativo" : "inativo"].join(" ").toLowerCase().includes(text)
     );
   }, [projetos, query]);
+
+  const filteredUnidadesInstaladas = useMemo(() => {
+    const text = query.toLowerCase();
+    return unidadesInstaladas.filter((unidade) =>
+      [unidade.codigo, unidade.nome, unidade.projetoNome, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"].join(" ").toLowerCase().includes(text)
+    );
+  }, [unidadesInstaladas, query]);
 
   async function submitCliente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -454,6 +483,35 @@ export function App() {
       await loadProjetos();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status do projeto.");
+    }
+  }
+
+  async function submitUnidadeInstalada(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedUnidadeInstalada) await updateSupabaseUnidadeInstalada(selectedUnidadeInstalada.idUnidade, payload);
+      else await createSupabaseUnidadeInstalada(payload);
+      setSelectedUnidadeInstalada(null);
+      formElement.reset();
+      await loadUnidadesInstaladas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar unidade instalada.");
+    }
+  }
+
+  async function toggleUnidadeInstaladaAtiva(unidade: UnidadeInstalada) {
+    const nextAtivo = !unidade.ativo;
+    if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} unidade ${unidade.nome}?`)) return;
+    setErrorMessage("");
+    try {
+      await setSupabaseUnidadeInstaladaAtiva(unidade.idUnidade, nextAtivo);
+      if (selectedUnidadeInstalada?.idUnidade === unidade.idUnidade) setSelectedUnidadeInstalada({ ...unidade, ativo: nextAtivo });
+      await loadUnidadesInstaladas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status da unidade.");
     }
   }
 
@@ -933,24 +991,33 @@ export function App() {
         )}
 
         {page === "unidades" && (
-          <section className="unit-grid">
-            {data.unidades.map((unidade) => {
-              const ordens = data.ordens.filter((ordem) => ordem.unidadeId === unidade.id && ordem.status !== "Concluida");
-              return (
-                <article key={unidade.id} className="unit-card">
-                  <div className="unit-top">
-                    <span>{unidade.codigo}</span>
-                    <StatusPill value={unidade.status} />
-                  </div>
-                  <h2>{unidade.nome}</h2>
-                  <p>{unidade.cliente} · {unidade.municipio}</p>
-                  <div className="unit-footer">
-                    <span>{unidade.contrato}</span>
-                    <strong>{ordens.length} OS aberta(s)</strong>
-                  </div>
-                </article>
-              );
-            })}
+          <section className={isGestor ? "two-columns catalog-layout" : "panel full"}>
+            <section className="panel full">
+              <div className="panel-heading"><h2>Unidades instaladas</h2><span>{filteredUnidadesInstaladas.length} registros</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Unidade</th><th>Projeto</th><th>Status</th>{isGestor && <th>Acoes</th>}</tr></thead>
+                  <tbody>
+                    {filteredUnidadesInstaladas.map((unidade) => (
+                      <tr key={unidade.idUnidade}>
+                        <td><strong>{unidade.nome}</strong><small>{unidade.codigo}</small></td>
+                        <td>{unidade.projetoNome}</td>
+                        <td><StatusPill value={unidade.ativo ? unidade.statusCodigo : "Inativo"} /></td>
+                        {isGestor && <td><div className="row-actions">
+                          <button className="icon-button" title="Editar unidade" onClick={() => setSelectedUnidadeInstalada(unidade)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title={unidade.ativo ? "Inativar unidade" : "Reativar unidade"} onClick={() => toggleUnidadeInstaladaAtiva(unidade)}><Power size={16} /></button>
+                        </div></td>}
+                      </tr>
+                    ))}
+                    {!filteredUnidadesInstaladas.length && <tr><td colSpan={isGestor ? 4 : 3}><span className="empty-state">Nenhuma unidade instalada encontrada.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            {isGestor && <section className="panel">
+              <div className="panel-heading"><h2>{selectedUnidadeInstalada ? "Editar unidade" : "Nova unidade"}</h2>{selectedUnidadeInstalada && <button onClick={() => setSelectedUnidadeInstalada(null)}>Nova</button>}</div>
+              <UnidadeInstaladaForm unidade={selectedUnidadeInstalada} projetos={projetos} status={statusUnidades} onSubmit={submitUnidadeInstalada} />
+            </section>}
           </section>
         )}
 
@@ -1305,6 +1372,35 @@ function ProjetoForm({ projeto, contratos, onSubmit }: {
       <label>UF<input name="uf" defaultValue={projeto?.uf || ""} maxLength={2} /></label>
       <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={projeto?.ativo ?? true} /><span>Ativo</span></label>
       <button className="primary-button"><CheckCircle2 size={16} />{projeto ? "Salvar projeto" : "Criar projeto"}</button>
+    </form>
+  );
+}
+
+function UnidadeInstaladaForm({ unidade, projetos, status, onSubmit }: {
+  unidade: UnidadeInstalada | null;
+  projetos: Projeto[];
+  status: StatusCatalogo[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={unidade?.idUnidade || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">Codigo<input name="codigo" defaultValue={unidade?.codigo || ""} required maxLength={80} /></label>
+      <label className="wide">Nome<input name="nome" defaultValue={unidade?.nome || ""} required maxLength={160} /></label>
+      <label className="wide">
+        Projeto
+        <select name="idProjeto" defaultValue={unidade?.idProjeto || ""} required>
+          <option value="">Selecione</option>
+          {projetos.map((projeto) => <option key={projeto.idProjeto} value={projeto.idProjeto}>{projeto.nome} — {projeto.contratoNumero}</option>)}
+        </select>
+      </label>
+      <label className="wide">
+        Status
+        <select name="statusCodigo" defaultValue={unidade?.statusCodigo || "instalada"} required>
+          {status.map((item) => <option key={item.codigo} value={item.codigo}>{item.descricao}</option>)}
+        </select>
+      </label>
+      <label className="checkbox-field wide"><input name="ativo" type="checkbox" defaultChecked={unidade?.ativo ?? true} /><span>Ativa</span></label>
+      <button className="primary-button"><CheckCircle2 size={16} />{unidade ? "Salvar unidade" : "Criar unidade"}</button>
     </form>
   );
 }

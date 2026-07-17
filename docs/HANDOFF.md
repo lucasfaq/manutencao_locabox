@@ -41,12 +41,14 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - CRUD de `empresas` implementado no frontend;
   - CRUD de `contratos` implementado no frontend;
   - CRUD de `projetos` implementado no frontend;
+  - tela de unidades migrada para `unidades_instaladas`;
   - menu de Clientes visivel apenas para gestor;
   - menu de Empresas visivel apenas para gestor;
   - criacao/edicao de cliente usando `public.clientes`;
   - criacao/edicao de empresa usando `public.empresas`;
   - contratos vinculados aos cadastros canonicos de clientes e empresas;
   - projetos vinculados aos contratos canonicos;
+  - unidades vinculadas aos projetos e ao catalogo `status_unidade`;
   - inativacao/reativacao por soft-delete via `ativo`;
   - tecnico permanece bloqueado para escrita por RLS.
 
@@ -128,8 +130,8 @@ Continuar Fase 2 - Cadastros base, migrando o frontend para o schema canonico ne
 2. Empresas - concluido.
 3. Contratos - concluido.
 4. Projetos - concluido.
-5. Unidades instaladas - proximo.
-6. Colaboradores e terceirizados.
+5. Unidades instaladas - concluido.
+6. Colaboradores e terceirizados - proximo.
 7. Equipes.
 8. Materiais/estoque.
 9. Catalogo de pendencias.

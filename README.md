@@ -92,6 +92,8 @@ As tabelas MVP antigas (`unidades`, `ordens`, `atendimentos`, `estoque`) permane
 
 Cadastros canonicos ja migrados no frontend: `clientes`, `empresas`, `contratos` e `projetos`, restritos a gestores e com inativacao logica.
 
+A tela de Unidades usa `unidades_instaladas`: leitura para usuarios autenticados e manutencao do cadastro por gestores.
+
 ## GitHub
 
 Repositorio alvo:
