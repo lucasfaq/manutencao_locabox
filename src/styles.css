@@ -257,7 +257,8 @@ main {
 
 .icon-button,
 .panel-heading button,
-.primary-button {
+.primary-button,
+.secondary-button {
   border: 0;
   border-radius: 8px;
   height: 42px;
@@ -277,6 +278,14 @@ main {
 .panel-heading button {
   color: #17211c;
   background: #f0c94a;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.secondary-button {
+  color: #25352d;
+  background: #eef3ef;
+  border: 1px solid #d7dfd8;
   padding: 0 14px;
   font-weight: 700;
 }
@@ -543,6 +552,44 @@ main {
   width: 16px;
   height: 16px;
   padding: 0;
+}
+
+.attendance-materials-field {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.attendance-materials-field legend {
+  padding: 0 5px;
+  color: #55655c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.attendance-materials-list {
+  display: grid;
+  gap: 10px;
+}
+
+.attendance-material-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(110px, 0.6fr) minmax(170px, 1fr) minmax(170px, 1fr) 42px;
+  gap: 10px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid #e2e8e3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.attendance-material-row .icon-button {
+  width: 42px;
+  height: 42px;
 }
 
 .unit-filters {
@@ -1128,7 +1175,8 @@ td small {
   .inventory-grid,
   .reports-grid,
   .form-grid,
-  .unit-filters {
+  .unit-filters,
+  .attendance-material-row {
     grid-template-columns: 1fr;
   }
 

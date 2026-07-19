@@ -27,6 +27,8 @@
 | 2026-07-17 | Senhas nunca sao exibidas; gestor define senha temporaria e cada usuario pode trocar a propria senha | Supabase armazena credenciais de forma nao recuperavel e a interface deve evitar exposicao de segredo |
 | 2026-07-17 | Equipes sera implementada dentro do atendimento canonico, nao como cadastro isolado | A tabela `equipes` exige `id_atendimento` e representa membros alocados em cada atendimento |
 | 2026-07-17 | Saldo de material e somente leitura no cadastro e sera alterado por movimentacoes | Preserva rastreabilidade e respeita as triggers de estoque do schema canonico |
+| 2026-07-19 | Catalogo de pendencias padrao e gerenciado por gestor e usado na criacao de OS apenas com itens ativos | Mantem padronizacao das OS sem apagar historico de pendencias ja usadas |
+| 2026-07-19 | Atendimentos lancam materiais por linhas estruturadas e geram saida canonica de estoque | Evita texto livre, preserva rastreabilidade de consumo, emprestimo de ferramenta e perda/avaria |
 # Planejamento de estoque baseado em movimentacoes
 
 - Data: 2026-07-17

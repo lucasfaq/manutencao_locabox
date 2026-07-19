@@ -1,6 +1,6 @@
 # Handoff - Manutencao Locabox
 
-Atualizado em: 2026-07-02
+Atualizado em: 2026-07-19
 
 ## Objetivo
 
@@ -57,6 +57,7 @@ Evoluir o controle de manutencao legado em MS Access para um sistema web respons
   - gestor pode criar conta, alterar email, perfil, vinculo, status e senha temporaria;
   - usuario autenticado pode alterar a propria senha;
   - cadastro de materiais usa estoque minimo e saldo derivado por movimentacoes;
+  - catalogo de pendencias padrao gerenciavel por gestor;
   - inativacao/reativacao por soft-delete via `ativo`;
   - tecnico permanece bloqueado para escrita por RLS.
 
@@ -141,8 +142,8 @@ Continuar Fase 2 - Cadastros base, migrando o frontend para o schema canonico ne
 5. Unidades instaladas - concluido.
 6. Colaboradores e terceirizados - concluido.
 7. Materiais/estoque - cadastro concluido; movimentacoes pendentes.
-8. Catalogo de pendencias - proximo.
-9. OS e Atendimentos canonicos, incluindo composicao de Equipes.
+8. Catalogo de pendencias - concluido.
+9. OS e Atendimentos canonicos, incluindo composicao de Equipes - proximo.
 
 ## Como retomar no Codex
 
@@ -164,3 +165,18 @@ Leia o handoff e continue a Fase 2 de cadastros base, implementando Empresas, us
 - Indicadores: consumo medio, desvio, estoque de seguranca, ponto de ressuprimento, estoque-alvo, cobertura, sugestao e situacao.
 - Fonte da demanda: somente movimentacoes canonicas do tipo `saida`; ajustes e entradas nao compoem consumo.
 - A sugestao nao cria pedido automaticamente.
+
+# Catalogo de pendencias — 2026-07-19
+
+- Gestor pode criar, editar, inativar e reativar registros de `public.pendencias_padrao`.
+- Tecnico continua sem acesso ao menu de cadastros e usa apenas pendencias ativas na criacao de OS.
+- Proximo passo recomendado: migrar OS e Atendimentos para o fluxo canonico completo, incluindo composicao de equipes por atendimento.
+
+# Atendimentos e materiais — 2026-07-19
+
+- Tela de Atendimentos deixou de usar campo livre "um material por linha".
+- Materiais agora sao lancados em linhas estruturadas com material do estoque, quantidade, tipo de uso e observacao.
+- Tipos de uso suportados: consumo, emprestimo de ferramenta/equipamento e perda ou avaria.
+- Criada RPC `public.registrar_atendimento_com_materiais(...)` para registrar atendimento MVP e saidas canonicas de estoque em transacao unica.
+- Cada linha de material gera uma movimentacao de tipo `saida` em `public.movimentacoes` e `public.movimentacoes_estoque`.
+- Proximo refinamento recomendado: separar formalmente materiais consumiveis, ferramentas/equipamentos retornaveis e bens avariados em schema proprio, com controle de devolucao para emprestimos.

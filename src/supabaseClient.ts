@@ -212,6 +212,13 @@ export type MaterialEstoque = {
   ativo: boolean;
 };
 
+export type AtendimentoMaterialUso = {
+  idMaterial: number;
+  quantidade: number;
+  tipoUso: "consumo" | "emprestimo_ferramenta" | "perda_avaria";
+  observacao: string;
+};
+
 export type EstoqueConfiguracao = {
   nivelServico: number;
   janelaHistoricaDias: number;
@@ -709,13 +716,17 @@ export async function loadStatusUnidades(): Promise<StatusCatalogo[]> {
   return data || [];
 }
 
-export async function loadPendenciasPadrao(): Promise<PendenciaPadrao[]> {
+export async function loadPendenciasPadrao(includeInactive = false): Promise<PendenciaPadrao[]> {
   const client = requireSupabase();
-  const { data, error } = await client
+  let query = client
     .from("pendencias_padrao")
     .select("id_pendencia, codigo, descricao, ativo")
-    .eq("ativo", true)
+    .order("ativo", { ascending: false })
     .order("descricao");
+
+  if (!includeInactive) query = query.eq("ativo", true);
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []).map((row: any) => ({
     idPendencia: Number(row.id_pendencia),
@@ -723,6 +734,59 @@ export async function loadPendenciasPadrao(): Promise<PendenciaPadrao[]> {
     descricao: row.descricao,
     ativo: Boolean(row.ativo)
   }));
+}
+
+function pendenciaPadraoPayload(payload: Record<string, FormDataEntryValue>) {
+  return {
+    codigo: String(payload.codigo || "").trim() || null,
+    descricao: String(payload.descricao || "").trim(),
+    ativo: payload.ativo === "on"
+  };
+}
+
+export async function createSupabasePendenciaPadrao(payload: Record<string, FormDataEntryValue>): Promise<PendenciaPadrao> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("pendencias_padrao")
+    .insert(pendenciaPadraoPayload(payload))
+    .select("id_pendencia, codigo, descricao, ativo")
+    .single();
+
+  if (error) throw error;
+  return {
+    idPendencia: Number(data.id_pendencia),
+    codigo: data.codigo || "",
+    descricao: data.descricao,
+    ativo: Boolean(data.ativo)
+  };
+}
+
+export async function updateSupabasePendenciaPadrao(idPendencia: number, payload: Record<string, FormDataEntryValue>): Promise<PendenciaPadrao> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("pendencias_padrao")
+    .update(pendenciaPadraoPayload(payload))
+    .eq("id_pendencia", idPendencia)
+    .select("id_pendencia, codigo, descricao, ativo")
+    .single();
+
+  if (error) throw error;
+  return {
+    idPendencia: Number(data.id_pendencia),
+    codigo: data.codigo || "",
+    descricao: data.descricao,
+    ativo: Boolean(data.ativo)
+  };
+}
+
+export async function setSupabasePendenciaPadraoAtivo(idPendencia: number, ativo: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client
+    .from("pendencias_padrao")
+    .update({ ativo })
+    .eq("id_pendencia", idPendencia);
+
+  if (error) throw error;
 }
 
 function unidadeInstaladaPayload(payload: Record<string, FormDataEntryValue>) {
@@ -1183,35 +1247,41 @@ export async function createSupabaseOrdem(payload: Record<string, FormDataEntryV
 
 export async function createSupabaseAtendimento(payload: Record<string, FormDataEntryValue>): Promise<Atendimento> {
   const client = requireSupabase();
-  const row = {
-    ordem_id: Number(payload.ordemId),
-    data: String(payload.data || new Date().toISOString().slice(0, 10)),
-    equipe: String(payload.equipe || "Equipe interna"),
-    status: String(payload.status || "Executado"),
-    relato: String(payload.relato || "")
-  };
-  const { data, error } = await client.from("atendimentos").insert(row).select("*").single();
+  const materiais = parseAtendimentoMateriais(payload.materiaisJson);
+  const dataAtendimento = String(payload.data || new Date().toISOString().slice(0, 10));
+  const equipe = String(payload.equipe || "Equipe interna");
+  const status = String(payload.status || "Executado") as Atendimento["status"];
+  const relato = String(payload.relato || "");
+  const { data, error } = await client.rpc("registrar_atendimento_com_materiais", {
+    p_ordem_id: Number(payload.ordemId),
+    p_data: dataAtendimento,
+    p_status: status,
+    p_equipe: equipe,
+    p_relato: relato,
+    p_materiais: materiais
+  });
   if (error) throw error;
 
-  const materiais = parseLines(payload.materiais);
-  if (materiais.length) {
-    const { error: materialError } = await client.from("atendimento_materiais").insert(
-      materiais.map((descricao) => ({ atendimento_id: data.id, descricao }))
-    );
-    if (materialError) throw materialError;
-  }
-
-  const nextStatus = data.status === "Executado" ? "Concluida" : "Pendente";
-  const { error: statusError } = await client.from("ordens").update({ status: nextStatus }).eq("id", data.ordem_id);
-  if (statusError) throw statusError;
-
   return {
-    id: Number(data.id),
-    ordemId: Number(data.ordem_id),
-    data: data.data,
-    equipe: data.equipe,
-    status: data.status,
-    relato: data.relato,
-    materiais
+    id: Number(data),
+    ordemId: Number(payload.ordemId),
+    data: dataAtendimento,
+    equipe,
+    status,
+    relato,
+    materiais: materiais.map((item) => `${item.idMaterial} | qtd: ${item.quantidade} | ${item.tipoUso}`)
   };
+}
+
+function parseAtendimentoMateriais(value: unknown): AtendimentoMaterialUso[] {
+  if (!value) return [];
+  const parsed = JSON.parse(String(value)) as Array<Partial<AtendimentoMaterialUso>>;
+  return parsed
+    .map((item) => ({
+      idMaterial: Number(item.idMaterial),
+      quantidade: Number(item.quantidade),
+      tipoUso: item.tipoUso || "consumo",
+      observacao: String(item.observacao || "").trim()
+    }))
+    .filter((item) => item.idMaterial > 0 && item.quantidade > 0);
 }

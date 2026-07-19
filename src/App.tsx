@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   UserRound,
   Wrench
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet"
 import {
   AdminUser,
   Atendimento,
+  AtendimentoMaterialUso,
   Bootstrap,
   Cliente,
   Colaborador,
@@ -41,6 +43,7 @@ import {
   createSupabaseMaterial,
   createSupabaseAtendimento,
   createSupabaseOrdem,
+  createSupabasePendenciaPadrao,
   createSupabaseProjeto,
   createSupabaseTerceirizado,
   createSupabaseUnidadeInstalada,
@@ -82,6 +85,7 @@ import {
   setSupabaseContratoAtivo,
   setSupabaseEmpresaAtivo,
   setSupabaseMaterialAtivo,
+  setSupabasePendenciaPadraoAtivo,
   setSupabaseProjetoAtivo,
   setSupabaseTerceirizadoAtivo,
   setSupabaseUnidadeInstaladaAtiva,
@@ -96,6 +100,7 @@ import {
   updateSupabaseColaborador,
   updateSupabaseContrato,
   updateSupabaseEmpresa,
+  updateSupabasePendenciaPadrao,
   updateSupabaseProjeto,
   updateSupabaseTerceirizado,
   updateSupabaseUnidadeInstalada,
@@ -105,7 +110,7 @@ import {
   withMetrics
 } from "./supabaseClient";
 
-type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "ordens" | "unidades" | "mapa" | "historico_unidade" | "atendimentos" | "estoque" | "relatorios";
+type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "pendencias" | "ordens" | "unidades" | "mapa" | "historico_unidade" | "atendimentos" | "estoque" | "relatorios";
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -123,6 +128,7 @@ const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard 
   { page: "projetos", label: "Projetos", icon: MapPin },
   { page: "pessoas", label: "Pessoas", icon: UserRound },
   { page: "usuarios", label: "Usuarios", icon: ShieldCheck },
+  { page: "pendencias", label: "Pendencias", icon: ClipboardList },
   { page: "ordens", label: "OS", icon: ClipboardList },
   { page: "unidades", label: "Unidades", icon: MapPin },
   { page: "mapa", label: "Mapa das Unidades", icon: MapPinned },
@@ -203,6 +209,7 @@ export function App() {
   const [usuarios, setUsuarios] = useState<AdminUser[]>([]);
   const [selectedUsuario, setSelectedUsuario] = useState<AdminUser | null>(null);
   const [pendenciasPadrao, setPendenciasPadrao] = useState<PendenciaPadrao[]>([]);
+  const [selectedPendenciaPadrao, setSelectedPendenciaPadrao] = useState<PendenciaPadrao | null>(null);
   const [materiais, setMateriais] = useState<MaterialEstoque[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<MaterialEstoque | null>(null);
   const [estoqueConfiguracao, setEstoqueConfiguracao] = useState<EstoqueConfiguracao | null>(null);
@@ -210,7 +217,7 @@ export function App() {
 
   const isGestor = perfil?.perfil === "gestor";
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "usuarios", "relatorios"].includes(item.page))),
+    () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "usuarios", "pendencias", "relatorios"].includes(item.page))),
     [isGestor]
   );
   const pageTitle = page === "historico_unidade" ? "Historico da Unidade" : navItems.find((item) => item.page === page)?.label;
@@ -340,7 +347,7 @@ export function App() {
       setPendenciasPadrao([]);
       return;
     }
-    setPendenciasPadrao(await loadPendenciasPadrao());
+    setPendenciasPadrao(await loadPendenciasPadrao(isGestor));
   }
 
   useEffect(() => {
@@ -532,6 +539,13 @@ export function App() {
     const text = query.toLowerCase();
     return materiais.filter((item) => [item.codigo, item.descricao, item.categoria, item.unidadeMedida].join(" ").toLowerCase().includes(text));
   }, [materiais, query]);
+
+  const filteredPendenciasPadrao = useMemo(() => {
+    const text = query.toLowerCase();
+    return pendenciasPadrao.filter((item) =>
+      [item.codigo, item.descricao, item.ativo ? "ativo" : "inativo"].join(" ").toLowerCase().includes(text)
+    );
+  }, [pendenciasPadrao, query]);
 
   const filteredEstoquePlanejamento = useMemo(() => {
     const text = query.toLowerCase();
@@ -793,6 +807,37 @@ export function App() {
     }
   }
 
+  async function submitPendenciaPadrao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      if (selectedPendenciaPadrao) await updateSupabasePendenciaPadrao(selectedPendenciaPadrao.idPendencia, payload);
+      else await createSupabasePendenciaPadrao(payload);
+      setSelectedPendenciaPadrao(null);
+      formElement.reset();
+      await loadPendencias();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar pendencia padrao.");
+    }
+  }
+
+  async function togglePendenciaPadraoAtivo(pendencia: PendenciaPadrao) {
+    const nextAtivo = !pendencia.ativo;
+    if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} pendencia ${pendencia.descricao}?`)) return;
+    setErrorMessage("");
+    try {
+      await setSupabasePendenciaPadraoAtivo(pendencia.idPendencia, nextAtivo);
+      if (selectedPendenciaPadrao?.idPendencia === pendencia.idPendencia) {
+        setSelectedPendenciaPadrao({ ...pendencia, ativo: nextAtivo });
+      }
+      await loadPendencias();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao alterar status da pendencia.");
+    }
+  }
+
   async function submitOwnPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -920,6 +965,19 @@ export function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
+    const materialIds = form.getAll("materialId").map(String);
+    const quantidades = form.getAll("materialQuantidade").map(String);
+    const tiposUso = form.getAll("materialTipoUso").map(String);
+    const observacoes = form.getAll("materialObservacao").map(String);
+    const materiaisUso: AtendimentoMaterialUso[] = materialIds
+      .map((idMaterial, index) => ({
+        idMaterial: Number(idMaterial),
+        quantidade: Number(quantidades[index] || 0),
+        tipoUso: (tiposUso[index] || "consumo") as AtendimentoMaterialUso["tipoUso"],
+        observacao: observacoes[index] || ""
+      }))
+      .filter((item) => item.idMaterial > 0 && item.quantidade > 0);
+    payload.materiaisJson = JSON.stringify(materiaisUso);
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
@@ -949,10 +1007,10 @@ export function App() {
         equipe: String(payload.equipe || "Equipe interna"),
         status: (payload.status as Atendimento["status"]) || "Executado",
         relato: String(payload.relato || ""),
-        materiais: String(payload.materiais || "")
-          .split("\n")
-          .map((item) => item.trim())
-          .filter(Boolean)
+        materiais: materiaisUso.map((item) => {
+          const material = materiais.find((candidate) => candidate.idMaterial === item.idMaterial);
+          return `${material?.descricao || item.idMaterial} | qtd: ${item.quantidade} | ${item.tipoUso}`;
+        })
       };
       setData((current) => withMetrics({
         ...current,
@@ -1097,7 +1155,7 @@ export function App() {
                 <div className="panel-heading">
                   <h2>Nova OS</h2>
                 </div>
-                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao} onSubmit={createOrdem} />
+                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} onSubmit={createOrdem} />
               </section>
             </div>
           </section>
@@ -1387,6 +1445,37 @@ export function App() {
           </section>
         )}
 
+        {page === "pendencias" && isGestor && (
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading"><h2>Pendencias padrao</h2><span>{filteredPendenciasPadrao.length} registros</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Pendencia</th><th>Codigo</th><th>Status</th><th>Acoes</th></tr></thead>
+                  <tbody>
+                    {filteredPendenciasPadrao.map((pendencia) => (
+                      <tr key={pendencia.idPendencia}>
+                        <td><strong>{pendencia.descricao}</strong></td>
+                        <td>{pendencia.codigo || "Sem codigo"}</td>
+                        <td><StatusPill value={pendencia.ativo ? "Ativo" : "Inativo"} /></td>
+                        <td><div className="row-actions">
+                          <button className="icon-button" title="Editar pendencia" onClick={() => setSelectedPendenciaPadrao(pendencia)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title={pendencia.ativo ? "Inativar pendencia" : "Reativar pendencia"} onClick={() => togglePendenciaPadraoAtivo(pendencia)}><Power size={16} /></button>
+                        </div></td>
+                      </tr>
+                    ))}
+                    {!filteredPendenciasPadrao.length && <tr><td colSpan={4}><span className="empty-state">Nenhuma pendencia padrao encontrada.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading"><h2>{selectedPendenciaPadrao ? "Editar pendencia" : "Nova pendencia"}</h2>{selectedPendenciaPadrao && <button onClick={() => setSelectedPendenciaPadrao(null)}>Nova</button>}</div>
+              <PendenciaPadraoForm pendencia={selectedPendenciaPadrao} onSubmit={submitPendenciaPadrao} />
+            </section>
+          </section>
+        )}
+
         {page === "ordens" && (
           <section className="panel full">
             <div className="panel-heading">
@@ -1572,7 +1661,7 @@ export function App() {
               <div className="panel-heading">
                 <h2>Registrar atendimento</h2>
               </div>
-              <AtendimentoForm ordens={data.ordens.filter((ordem) => ordem.status !== "Concluida")} onSubmit={createAtendimento} />
+              <AtendimentoForm ordens={data.ordens.filter((ordem) => ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} onSubmit={createAtendimento} />
             </section>
             <section className="panel">
               <div className="panel-heading">
@@ -1984,7 +2073,25 @@ function OrdemForm({
   );
 }
 
-function AtendimentoForm({ ordens, onSubmit }: { ordens: Ordem[]; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function AtendimentoForm({
+  ordens,
+  materiais,
+  onSubmit
+}: {
+  ordens: Ordem[];
+  materiais: MaterialEstoque[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const [materialRows, setMaterialRows] = useState<Array<{ id: number }>>([]);
+
+  function addMaterialRow() {
+    setMaterialRows((current) => [...current, { id: Date.now() + current.length }]);
+  }
+
+  function removeMaterialRow(id: number) {
+    setMaterialRows((current) => current.filter((row) => row.id !== id));
+  }
+
   return (
     <form className="form-grid" onSubmit={onSubmit}>
       <label className="wide">
@@ -2013,10 +2120,50 @@ function AtendimentoForm({ ordens, onSubmit }: { ordens: Ordem[]; onSubmit: (eve
         Relato
         <textarea name="relato" rows={4} placeholder="O que foi executado, evidencias e pendencias" />
       </label>
-      <label className="wide">
-        Materiais
-        <textarea name="materiais" rows={3} placeholder="Um material por linha" />
-      </label>
+      <fieldset className="attendance-materials-field wide">
+        <legend>Materiais e equipamentos</legend>
+        <div className="attendance-materials-list">
+          {materialRows.map((row) => (
+            <div className="attendance-material-row" key={row.id}>
+              <label>
+                Material
+                <select name="materialId" required>
+                  <option value="">Selecione</option>
+                  {materiais.map((material) => (
+                    <option key={material.idMaterial} value={material.idMaterial}>
+                      {material.descricao} · saldo {material.estoqueAtual.toLocaleString("pt-BR")} {material.unidadeMedida}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Quantidade
+                <input name="materialQuantidade" type="number" min="0.01" step="0.01" required />
+              </label>
+              <label>
+                Lancamento
+                <select name="materialTipoUso" defaultValue="consumo" required>
+                  <option value="consumo">Consumo</option>
+                  <option value="emprestimo_ferramenta">Emprestimo de ferramenta</option>
+                  <option value="perda_avaria">Perda ou avaria</option>
+                </select>
+              </label>
+              <label>
+                Observacao
+                <input name="materialObservacao" maxLength={160} placeholder="Equipe, avaria ou detalhe" />
+              </label>
+              <button className="icon-button" type="button" title="Remover material" onClick={() => removeMaterialRow(row.id)}>
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          {!materialRows.length && <span className="empty-state">Nenhum material informado.</span>}
+        </div>
+        <button className="secondary-button" type="button" onClick={addMaterialRow} disabled={!materiais.length}>
+          <Plus size={16} />
+          Adicionar material
+        </button>
+      </fieldset>
       <button className="primary-button">
         <CheckCircle2 size={16} />
         Registrar
@@ -2249,6 +2396,29 @@ function UsuarioForm({ usuario, colaboradores, onSubmit }: {
         <span>Usuario ativo</span>
       </label>
       <button className="primary-button"><ShieldCheck size={16} />{usuario ? "Salvar acesso" : "Criar usuario"}</button>
+    </form>
+  );
+}
+
+function PendenciaPadraoForm({ pendencia, onSubmit }: {
+  pendencia: PendenciaPadrao | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form key={pendencia?.idPendencia || "new"} className="form-grid" onSubmit={onSubmit}>
+      <label className="wide">
+        Descricao
+        <input name="descricao" defaultValue={pendencia?.descricao || ""} required maxLength={180} />
+      </label>
+      <label className="wide">
+        Codigo
+        <input name="codigo" defaultValue={pendencia?.codigo || ""} maxLength={80} />
+      </label>
+      <label className="checkbox-field wide">
+        <input name="ativo" type="checkbox" defaultChecked={pendencia?.ativo ?? true} />
+        <span>Ativa</span>
+      </label>
+      <button className="primary-button"><CheckCircle2 size={16} />{pendencia ? "Salvar pendencia" : "Criar pendencia"}</button>
     </form>
   );
 }
