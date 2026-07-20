@@ -14,6 +14,8 @@ import {
   MapPin,
   Menu,
   PackageSearch,
+  PanelLeftClose,
+  PanelLeftOpen,
   Power,
   Plus,
   RefreshCw,
@@ -190,6 +192,7 @@ export function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<"supabase" | "api" | "static">("static");
   const [errorMessage, setErrorMessage] = useState("");
@@ -1237,16 +1240,24 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
         <div className="brand">
           <div className="brand-mark">
             <Wrench size={20} />
           </div>
-          <div>
+          <div className="brand-copy">
             <strong>Locabox</strong>
             <span>Manutencao</span>
           </div>
+          <button
+            className="sidebar-toggle desktop-only"
+            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            onClick={() => setSidebarCollapsed((value) => !value)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
         </div>
         <nav>
           {visibleNavGroups.map((group) => (
@@ -1255,7 +1266,12 @@ export function App() {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button key={item.page} className={page === item.page ? "active" : ""} onClick={() => { setPage(item.page); setMenuOpen(false); }}>
+                  <button
+                    key={item.page}
+                    className={page === item.page ? "active" : ""}
+                    title={sidebarCollapsed ? item.label : undefined}
+                    onClick={() => { setPage(item.page); setMenuOpen(false); }}
+                  >
                     <Icon size={18} />
                     <span>{item.label}</span>
                   </button>
