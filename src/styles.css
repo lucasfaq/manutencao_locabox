@@ -1555,6 +1555,38 @@ td small.relation-warning {
   display: grid;
   gap: 4px;
   text-align: right;
+  justify-items: end;
+}
+
+.pdf-download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  margin-top: 8px;
+  padding: 0 13px;
+  border: 1px solid #bdd0c1;
+  border-radius: 8px;
+  background: #173d24;
+  color: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pdf-download-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.pdf-exporting {
+  width: 1180px;
+  padding: 22px;
+  background: #ffffff;
+}
+
+.pdf-exporting .pdf-download-button {
+  display: none;
 }
 
 .executive-report-section {

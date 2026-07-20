@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
+  Download,
   Edit3,
   LayoutDashboard,
   LogOut,
@@ -26,7 +27,7 @@ import {
   Wrench
 } from "lucide-react";
 import L, { LatLngBoundsExpression } from "leaflet";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import {
   AdminUser,
@@ -329,6 +330,8 @@ export function App() {
   const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null);
   const [atendimentoMovimentacoes, setAtendimentoMovimentacoes] = useState<Record<number, AtendimentoMovimentacao[]>>({});
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
+  const [generatingReportPdf, setGeneratingReportPdf] = useState(false);
+  const reportsRef = useRef<HTMLElement | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const responsavelOptions = useMemo<ResponsavelOption[]>(
@@ -1122,6 +1125,57 @@ export function App() {
   async function selectHistoricoUnidade(idUnidade: number) {
     const unidade = mapaUnidades.find((item) => item.idUnidade === idUnidade);
     if (unidade) await openHistoricoUnidade(unidade);
+  }
+
+  async function downloadExecutiveReportsPdf() {
+    if (!reportsRef.current || generatingReportPdf) return;
+    setGeneratingReportPdf(true);
+    setErrorMessage("");
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf")
+      ]);
+      const target = reportsRef.current;
+      target.classList.add("pdf-exporting");
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+
+      const canvas = await html2canvas(target, {
+        backgroundColor: "#ffffff",
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        useCORS: true,
+        windowWidth: target.scrollWidth,
+        windowHeight: target.scrollHeight
+      });
+      target.classList.remove("pdf-exporting");
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const imageWidth = pageWidth - margin * 2;
+      const imageHeight = (canvas.height * imageWidth) / canvas.width;
+      const imageData = canvas.toDataURL("image/png");
+      let remainingHeight = imageHeight;
+      let y = margin;
+
+      pdf.addImage(imageData, "PNG", margin, y, imageWidth, imageHeight, undefined, "FAST");
+      remainingHeight -= pageHeight - margin * 2;
+      while (remainingHeight > 0) {
+        pdf.addPage();
+        y = margin - (imageHeight - remainingHeight);
+        pdf.addImage(imageData, "PNG", margin, y, imageWidth, imageHeight, undefined, "FAST");
+        remainingHeight -= pageHeight - margin * 2;
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      pdf.save(`relatorio-executivo-manutencao-${date}.pdf`);
+    } catch (error) {
+      reportsRef.current?.classList.remove("pdf-exporting");
+      setErrorMessage(error instanceof Error ? `Falha ao gerar PDF: ${error.message}` : "Falha ao gerar PDF executivo.");
+    } finally {
+      setGeneratingReportPdf(false);
+    }
   }
 
   async function toggleUnidadeInstaladaAtiva(unidade: UnidadeInstalada) {
@@ -2391,7 +2445,7 @@ export function App() {
         )}
 
         {page === "relatorios" && (
-          <section className="reports-page">
+          <section className="reports-page" ref={reportsRef}>
             <section className="executive-report-hero">
               <div>
                 <span>Relatorios executivos</span>
@@ -2400,6 +2454,10 @@ export function App() {
               <div className="executive-report-meta">
                 <strong>{new Date().toLocaleDateString("pt-BR")}</strong>
                 <span>{data.ordens.length} OS / {data.atendimentos.length} atendimentos</span>
+                <button type="button" className="pdf-download-button" onClick={downloadExecutiveReportsPdf} disabled={generatingReportPdf}>
+                  <Download size={16} />
+                  {generatingReportPdf ? "Gerando PDF..." : "Baixar PDF"}
+                </button>
               </div>
             </section>
 
