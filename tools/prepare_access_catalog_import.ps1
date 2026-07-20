@@ -38,6 +38,12 @@ function SqlString($value) {
   return "'" + $text.Replace("'", "''") + "'"
 }
 
+function SqlText($value) {
+  if ($null -eq $value) { return "''" }
+  $text = ([string]$value).Trim()
+  return "'" + $text.Replace("'", "''") + "'"
+}
+
 function SqlRequiredString($value, $fallback) {
   $text = if ($null -eq $value) { "" } else { ([string]$value).Trim() }
   if ($text -eq "") { $text = $fallback }
@@ -91,7 +97,7 @@ function Split-Location($value) {
   $result = [ordered]@{ estado = ""; cidade = ""; bairro = ""; rua = $text }
   if ($text -eq "") { return $result }
 
-  $parts = @($text -split '\s*[-–,]\s*' | Where-Object { $_.Trim() -ne "" })
+  $parts = @($text -split '\s*(?:,|\s[-–]\s)\s*' | Where-Object { $_.Trim() -ne "" })
   if ($parts.Count -ge 3) {
     $result.rua = $parts[0].Trim()
     $result.bairro = $parts[1].Trim()
@@ -287,11 +293,11 @@ foreach ($unidade in $unidades) {
     [int]$unidade.ID_Projeto,
     (SqlString $codigo),
     (SqlRequiredString $nomeBase "Unidade $($unidade.ID_Unidade)"),
-    (SqlString $location.estado),
-    (SqlString $location.cidade),
-    (SqlString $location.bairro),
-    (SqlString $location.rua),
-    (SqlString $unidade.LinkGM),
+    (SqlText $location.estado),
+    (SqlText $location.cidade),
+    (SqlText $location.bairro),
+    (SqlText $location.rua),
+    (SqlText $unidade.LinkGM),
     (SqlString (Normalize-StatusUnidade $statusLabel)),
     "true"
   ) @("id_projeto", "codigo", "nome", "estado", "cidade", "bairro", "rua", "google_maps_url", "status_codigo", "ativo", "atualizado_em")
