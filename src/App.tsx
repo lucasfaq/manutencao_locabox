@@ -1236,7 +1236,7 @@ export function App() {
 
   async function deleteAtendimento(atendimento: Atendimento) {
     if (atendimento.materiais.length > 0) {
-      setErrorMessage(`Este atendimento possui material lancado: ${atendimento.materiais.join("; ")}. Use o botao de estorno para devolver o material ao estoque antes de excluir.`);
+      setErrorMessage(`Este atendimento possui material lancado: ${atendimento.materiais.join("; ")}. Em Atendimentos, na coluna Materiais deste registro, clique em "Estornar materiais"; depois exclua o atendimento.`);
       return;
     }
     if (!window.confirm(`Excluir atendimento #${atendimento.id}?`)) return;
@@ -1982,6 +1982,12 @@ export function App() {
                           <td title={atendimento.materiais.join(" | ") || "Sem material"}>
                             <strong>{atendimento.materiais.length}</strong>
                             <small className={atendimento.materiais.length ? "relation-warning" : ""}>{materiaisResumo}</small>
+                            {isGestor && atendimento.materiais.length > 0 && (
+                              <button className="material-reversal-button" type="button" onClick={() => estornarAtendimentoMateriais(atendimento)}>
+                                <RefreshCw size={15} />
+                                Estornar materiais
+                              </button>
+                            )}
                             {movimentacoes.length > 0 && (
                               <div className="movement-links">
                                 {movimentacoes.map((movimentacao) => (
@@ -1996,10 +2002,7 @@ export function App() {
                           <td>
                             <div className="row-actions">
                               <button className="icon-button" title="Editar atendimento" onClick={() => setSelectedAtendimento(atendimento)}><Edit3 size={16} /></button>
-                              {isGestor && atendimento.materiais.length > 0 && (
-                                <button className="icon-button" title="Estornar materiais do atendimento" onClick={() => estornarAtendimentoMateriais(atendimento)}><RefreshCw size={16} /></button>
-                              )}
-                              <button className="icon-button" title={atendimento.materiais.length ? `Exclusao bloqueada: ${atendimento.materiais.join(" | ")}` : "Excluir atendimento"} onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
+                              <button className="icon-button" disabled={atendimento.materiais.length > 0} title={atendimento.materiais.length ? `Estorne os materiais antes de excluir: ${atendimento.materiais.join(" | ")}` : "Excluir atendimento"} onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
