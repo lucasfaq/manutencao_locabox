@@ -207,22 +207,42 @@ function formatMovementDate(value: string) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function parseLocalDate(value: string) {
+  if (!value) return null;
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysBetween(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
+function formatDays(value: number | null) {
+  if (value == null) return "n/d";
+  return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} dias`;
+}
+
+function formatPercent(value: number | null) {
+  if (value == null) return "n/d";
+  return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
 function StatusPill({ value }: { value: string }) {
   const tone = value === "Concluida" || value === "Executado" ? "ok" : value === "Pendente" || value === "Parcial" ? "warn" : "info";
   return <span className={`pill ${tone}`}>{value}</span>;
 }
 
-function StatCard({ label, value, icon: Icon, tone }: { label: string; value: number | string; icon: typeof LayoutDashboard; tone?: string }) {
+function DashboardKpi({ title, subtitle, value }: { title: string; subtitle: string; value: number | string }) {
   return (
-    <div className={`stat-card ${tone || ""}`}>
-      <div className="stat-icon">
-        <Icon size={18} />
-      </div>
-      <div>
-        <p>{label}</p>
-        <strong>{value}</strong>
-      </div>
-    </div>
+    <article className="dashboard-kpi">
+      <strong>{title}</strong>
+      <span>{subtitle}</span>
+      <p>{value}</p>
+    </article>
   );
 }
 
@@ -306,6 +326,82 @@ export function App() {
       estoqueBaixo: materiais.filter((item) => item.ativo && item.estoqueAtual <= item.estoqueMinimo).length
     };
   }, [data.metrics, materiais, session, unidadesInstaladas]);
+  const maintenanceDashboard = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const ordensAbertas = data.ordens.filter((ordem) => ordem.status !== "Concluida");
+    const ordensUltimos15 = data.ordens.filter((ordem) => {
+      const abertura = parseLocalDate(ordem.abertura);
+      return abertura ? daysBetween(abertura, today) <= 15 : false;
+    });
+    const ordensAbertasMais15 = ordensAbertas.filter((ordem) => {
+      const abertura = parseLocalDate(ordem.abertura);
+      return abertura ? daysBetween(abertura, today) > 15 : false;
+    });
+    const atendimentosUltimos30 = data.atendimentos.filter((atendimento) => {
+      const dataAtendimento = parseLocalDate(atendimento.data);
+      return dataAtendimento ? daysBetween(dataAtendimento, today) <= 30 : false;
+    });
+    const atendimentoPorOrdem = new Map<number, Atendimento[]>();
+    data.atendimentos.forEach((atendimento) => {
+      atendimentoPorOrdem.set(atendimento.ordemId, [...(atendimentoPorOrdem.get(atendimento.ordemId) || []), atendimento]);
+    });
+    const mttaValues = data.ordens.flatMap((ordem) => {
+      const abertura = parseLocalDate(ordem.abertura);
+      const primeiroAtendimento = (atendimentoPorOrdem.get(ordem.id) || [])
+        .map((atendimento) => parseLocalDate(atendimento.data))
+        .filter((date): date is Date => Boolean(date))
+        .sort((a, b) => a.getTime() - b.getTime())[0];
+      return abertura && primeiroAtendimento ? [daysBetween(abertura, primeiroAtendimento)] : [];
+    });
+    const mttrValues = data.ordens.flatMap((ordem) => {
+      if (ordem.status !== "Concluida") return [];
+      const abertura = parseLocalDate(ordem.abertura);
+      const ultimoAtendimento = (atendimentoPorOrdem.get(ordem.id) || [])
+        .map((atendimento) => parseLocalDate(atendimento.data))
+        .filter((date): date is Date => Boolean(date))
+        .sort((a, b) => b.getTime() - a.getTime())[0];
+      return abertura && ultimoAtendimento ? [daysBetween(abertura, ultimoAtendimento)] : [];
+    });
+    const aberturasOrdenadas = data.ordens
+      .map((ordem) => parseLocalDate(ordem.abertura))
+      .filter((date): date is Date => Boolean(date))
+      .sort((a, b) => a.getTime() - b.getTime());
+    const mtbfValues = aberturasOrdenadas.slice(1).map((date, index) => daysBetween(aberturasOrdenadas[index], date));
+    const ordensComAtendimento = data.ordens.filter((ordem) => (atendimentoPorOrdem.get(ordem.id) || []).length > 0);
+    const atendidasDentroPrazo = ordensComAtendimento.filter((ordem) => {
+      const prazo = parseLocalDate(ordem.prazoSla);
+      const primeiroAtendimento = (atendimentoPorOrdem.get(ordem.id) || [])
+        .map((atendimento) => parseLocalDate(atendimento.data))
+        .filter((date): date is Date => Boolean(date))
+        .sort((a, b) => a.getTime() - b.getTime())[0];
+      return prazo && primeiroAtendimento ? primeiroAtendimento.getTime() <= prazo.getTime() : false;
+    });
+    const pendencias = new Map<string, number>();
+    data.ordens.forEach((ordem) => {
+      const descricoes = ordem.pendenciasDetalhes.length ? ordem.pendenciasDetalhes.map((pendencia) => pendencia.descricao) : ordem.pendencias;
+      descricoes.forEach((descricao) => {
+        const key = descricao.trim();
+        if (!key) return;
+        pendencias.set(key, (pendencias.get(key) || 0) + 1);
+      });
+    });
+
+    return {
+      ordensAbertas: ordensAbertas.length,
+      ordensUltimos15: ordensUltimos15.length,
+      ordensAbertasMais15: ordensAbertasMais15.length,
+      atendimentosUltimos30: atendimentosUltimos30.length,
+      mtta: average(mttaValues),
+      mttr: average(mttrValues),
+      mtbf: average(mtbfValues),
+      slaAtendidoPercentual: ordensComAtendimento.length ? (atendidasDentroPrazo.length / ordensComAtendimento.length) * 100 : null,
+      topPendencias: [...pendencias.entries()]
+        .map(([descricao, quantidade]) => ({ descricao, quantidade }))
+        .sort((a, b) => b.quantidade - a.quantidade || a.descricao.localeCompare(b.descricao, "pt-BR"))
+        .slice(0, 10)
+    };
+  }, [data.atendimentos, data.ordens]);
 
   function closeActiveForm() {
     setActiveForm(null);
@@ -1452,49 +1548,56 @@ export function App() {
 
         {page === "dashboard" && (
           <section className="content-grid">
-            <div className="stats-row">
-              <StatCard label="Unidades" value={dashboardMetrics.unidades} icon={MapPin} />
-              <StatCard label="OS abertas" value={dashboardMetrics.ordensAbertas} icon={ClipboardList} />
-              <StatCard label="SLA vencido" value={dashboardMetrics.slaVencidas} icon={AlertTriangle} tone="danger" />
-              <StatCard label="Atend./OS" value={dashboardMetrics.atendimentosPorOs} icon={Wrench} />
-              <StatCard label="Estoque baixo" value={dashboardMetrics.estoqueBaixo} icon={PackageSearch} tone="warn" />
-            </div>
+            <section className="maintenance-kpis">
+              <DashboardKpi title="Ordens de Manutencao" subtitle="Em Aberto" value={maintenanceDashboard.ordensAbertas} />
+              <DashboardKpi title="Ordens de Manutencao" subtitle="Ultimos 15 dias" value={maintenanceDashboard.ordensUltimos15} />
+              <DashboardKpi title="Ordens de Manutencao" subtitle="Em Aberto > 15 dias" value={maintenanceDashboard.ordensAbertasMais15} />
+              <DashboardKpi title="Atendimentos" subtitle="Ultimos 30 dias" value={maintenanceDashboard.atendimentosUltimos30} />
+              <DashboardKpi title="Tempo Medio de Atendimento" subtitle="MTTA" value={formatDays(maintenanceDashboard.mtta)} />
+              <DashboardKpi title="Tempo Medio de Finalizacao" subtitle="MTTR" value={formatDays(maintenanceDashboard.mttr)} />
+              <DashboardKpi title="Tempo Medio Entre Ordens" subtitle="MTBF" value={formatDays(maintenanceDashboard.mtbf)} />
+              <DashboardKpi title="% Ordens Atendidas Dentro do Prazo" subtitle="SLA" value={formatPercent(maintenanceDashboard.slaAtendidoPercentual)} />
+            </section>
 
-            <div className="two-columns">
-              <section className="panel">
+            <div className="maintenance-dashboard-grid">
+              <section className="panel maintenance-ranking">
                 <div className="panel-heading">
-                  <h2>OS prioritarias</h2>
-                  <div className="heading-actions">
-                    <button onClick={() => setPage("ordens")}>Ver OS</button>
-                    <button onClick={() => { setSelectedOrdem(null); setActiveForm("ordem"); }}>Nova OS</button>
-                  </div>
+                  <h2>Top 10 Manutencoes</h2>
+                  <span>ABC das pendencias mais solicitadas</span>
                 </div>
-                <div className="order-list">
-                  {filteredOrdens.slice(0, 5).map((ordem) => {
-                    const unidade = findUnidade(data.unidades, ordem);
-                    const sla = getSla(ordem);
-                    return (
-                      <article key={ordem.id} className="order-card">
-                        <div>
-                          <strong>{ordem.protocolo}</strong>
-                          <span>{unidade?.nome} · {unidade?.municipio}</span>
-                        </div>
-                        <div className="card-meta">
-                          <span className={`pill ${sla.tone}`}>{sla.label}</span>
-                          <StatusPill value={ordem.status} />
-                        </div>
-                      </article>
-                    );
-                  })}
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Top 10 Manutencoes</th>
+                        <th>Quantidade</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {maintenanceDashboard.topPendencias.map((item) => (
+                        <tr key={item.descricao}>
+                          <td>{item.descricao}</td>
+                          <td>{item.quantidade}</td>
+                        </tr>
+                      ))}
+                      {!maintenanceDashboard.topPendencias.length && (
+                        <tr>
+                          <td colSpan={2}>
+                            <span className="empty-state">Nenhuma pendencia registrada.</span>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </section>
 
-              <section className="panel">
-                <div className="panel-heading"><h2>Consultas rapidas</h2><span>Use os menus para filtrar e abrir cadastros.</span></div>
+              <section className="panel quick-dashboard-actions">
+                <div className="panel-heading"><h2>Consultas rapidas</h2><span>Acesso aos detalhes</span></div>
                 <div className="quick-actions">
+                  <button type="button" onClick={() => setPage("ordens")}><ClipboardList size={16} />OS</button>
                   <button type="button" onClick={() => setPage("atendimentos")}><Wrench size={16} />Atendimentos</button>
-                  <button type="button" onClick={() => setPage("estoque")}><Boxes size={16} />Estoque</button>
-                  <button type="button" onClick={() => setPage("mapa")}><MapPinned size={16} />Mapa</button>
+                  <button type="button" onClick={() => setPage("pendencias")}><ClipboardList size={16} />Pendencias</button>
                 </div>
               </section>
             </div>
