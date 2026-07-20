@@ -1320,19 +1320,21 @@ export async function deleteSupabaseOrdem(ordem: Ordem): Promise<void> {
   const client = requireSupabase();
   const { data: atendimentos, error: loadError } = await client
     .from("atendimentos")
-    .select("id, atendimento_materiais(id)")
+    .select("id")
     .eq("ordem_id", ordem.id);
   if (loadError) throw loadError;
 
-  const hasMateriais = (atendimentos || []).some((atendimento: any) => (atendimento.atendimento_materiais || []).length > 0);
-  if (hasMateriais) {
-    throw new Error("Esta OS possui atendimento com material ou movimentacao de estoque. Exclua apenas OS sem baixa de material para preservar o estoque.");
-  }
-
   const atendimentoIds = (atendimentos || []).map((atendimento: any) => Number(atendimento.id));
   if (atendimentoIds.length) {
-    const { error: pendenciasAtendimentoError } = await client.from("atendimento_pendencias").delete().in("atendimento_id", atendimentoIds);
-    if (pendenciasAtendimentoError) throw pendenciasAtendimentoError;
+    const { count, error: materiaisError } = await client
+      .from("atendimento_materiais")
+      .select("id", { count: "exact", head: true })
+      .in("atendimento_id", atendimentoIds);
+    if (materiaisError) throw materiaisError;
+    if (Number(count || 0) > 0) {
+      throw new Error("Esta OS possui atendimento com material ou movimentacao de estoque. Exclua apenas OS sem baixa de material para preservar o estoque.");
+    }
+
     const { error: atendimentosError } = await client.from("atendimentos").delete().in("id", atendimentoIds);
     if (atendimentosError) throw atendimentosError;
   }

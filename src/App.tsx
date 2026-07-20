@@ -1055,7 +1055,10 @@ export function App() {
       if (selectedAtendimento?.ordemId === ordem.id) setSelectedAtendimento(null);
       if (hasSupabaseConfig) await load();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Falha ao excluir OS.");
+      console.error("Falha ao excluir OS", error);
+      const message = error && typeof error === "object" && "message" in error ? String((error as { message?: unknown }).message) : "";
+      const detail = error && typeof error === "object" && "details" in error ? String((error as { details?: unknown }).details) : "";
+      setErrorMessage(message || detail ? `Falha ao excluir OS: ${message || detail}` : "Falha ao excluir OS.");
     }
   }
 
