@@ -399,3 +399,242 @@ Ao final, ainda existiam arquivos locais nao relacionados e nao commitados. Nao 
 ```text
 Leia apps/manutencao-web/docs/HANDOFF.md e retome a partir da secao "Retomada exclusao de OS, sidebar e estorno de materiais — 2026-07-20". Primeiro confirme se o commit 30ea1ff foi publicado, depois valide se as RPCs listar_atendimento_mvp_movimentacoes e estornar_atendimento_mvp_materiais existem no Supabase remoto.
 ```
+
+# Retomada cadastros legados, mapa, dashboard e relatorios executivos — 2026-07-20
+
+## Contexto da conversa
+
+O usuario pediu continuidade no sistema web de manutencao apos estabilizar exclusao/estorno de materiais. A rodada tratou quatro frentes principais:
+
+- importar cadastros legados do Access sem trazer OS, atendimentos ou materiais;
+- ajustar o painel/dashboard com indicadores adicionais mantendo o estilo moderno;
+- corrigir mapa e filtros de unidades;
+- criar relatorios executivos e exportacao em PDF.
+
+## Importacao de cadastros legados
+
+Fonte analisada:
+
+- `C:\Users\loc00\Downloads\Backup Manutenção\export_postgresql.sql`
+- `C:\Users\loc00\Downloads\Backup Manutenção\Controle de Manutenção.accdb`
+
+Constatacao importante:
+
+- `export_postgresql.sql` continha apenas schema, sem dados (`INSERT`/`COPY`).
+- Os dados reais estavam no `.accdb`.
+- Driver ODBC 64-bit do Access estava instalado e funcionou.
+
+Script criado:
+
+- `tools/prepare_access_catalog_import.ps1`
+
+Saidas geradas localmente, ignoradas pelo Git:
+
+- `outputs/access-catalog-import-2026-07-20/`
+
+Escopo importado para o Supabase remoto:
+
+- `clientes`: 22
+- `empresas`: 2
+- `contratos`: 22
+- `projetos`: 23
+- `unidades_instaladas`: 113
+
+Escopo explicitamente nao importado:
+
+- OS;
+- atendimentos;
+- materiais;
+- movimentacoes;
+- pendencias.
+
+Validacoes pos-importacao:
+
+- `ordens`: 0
+- `atendimentos`: 0
+- `materiais`: 0
+- contratos sem cliente/empresa: 0
+- projetos sem contrato: 0
+- unidades sem projeto: 0
+
+Commits relacionados:
+
+- `357f78c` - adiciona preparador de importacao de cadastros legados.
+- `6dd2bad` - corrige geracao SQL da importacao legada.
+
+## Dashboard
+
+A tela de Painel foi ajustada para manter o visual moderno ja aprovado pelo usuario.
+
+Alteracoes principais:
+
+- 4 cards por linha;
+- ate 3 linhas de indicadores;
+- hover com explicacao do indicador;
+- correcao de z-index/stacking dos tooltips para nao ficarem por baixo dos cards inferiores;
+- ABC de pendencias visualmente refinado.
+
+Commits relacionados:
+
+- `fe26ff2` - corrige empilhamento dos tooltips do dashboard.
+- `fd23b0d` - mantem KPIs em quatro colunas.
+- `1cd7810` - cards em quatro colunas com tooltips.
+
+## Mapa de unidades
+
+Problema reportado:
+
+- o mapa nao carregava mesmo com links validos do Google Maps;
+- filtros por estado/cidade/bairro/rua estavam ruins por serem selects fechados.
+
+Causa encontrada:
+
+- o banco remoto tinha 113 unidades com `google_maps_url`, mas 0 com `latitude`/`longitude`;
+- o mapa desenha pinos somente quando latitude e longitude existem.
+
+Correcoes executadas no Supabase remoto:
+
+- 70 coordenadas extraidas diretamente de URLs com padrao `@latitude,longitude`;
+- 43 links curtos `maps.app.goo.gl` resolvidos por redirecionamento e atualizados com URL final e coordenadas.
+
+Resultado validado no remoto:
+
+- total unidades: 113
+- com link: 113
+- com coordenadas: 113
+- link sem coordenada: 0
+- sem link: 0
+
+Alteracoes no frontend:
+
+- filtros de Estado, Cidade, Bairro e Rua viraram campos digitaveis com `datalist`;
+- filtros passaram a aceitar texto parcial e ignorar acentos;
+- painel lateral do mapa passou a separar:
+  - unidades filtradas;
+  - unidades com pin;
+  - links sem coordenada;
+  - unidades sem link.
+
+Alteracao preventiva:
+
+- `tools/prepare_access_catalog_import.ps1` agora extrai latitude/longitude quando o link ja possui coordenadas explicitas.
+
+Commit relacionado:
+
+- `45b8290` - melhora filtros do mapa e status de georreferenciamento.
+
+## Relatorios executivos
+
+Pedido do usuario:
+
+- relatorio de pendencias por semana, 30 dias, 60 dias e ultimos 12 meses;
+- relatorio de manutencoes por contrato;
+- relatorio de manutencoes realizadas por semana, 30 dias, 60 dias e ultimos 12 meses;
+- visual no padrao executivo ITP/Locabox.
+
+Decisoes de calculo:
+
+- "Semana" foi implementado como ultimos 7 dias corridos.
+- "Ultimos 12 meses" foi implementado como janela movel de 12 meses.
+- Pendencias usam a data de abertura da OS como data-base.
+- Manutencoes realizadas usam a data do atendimento como data-base.
+- No card de manutencoes, o numero principal conta status `Executado`; o detalhe mostra o total de atendimentos registrados por status.
+- Relatorio por contrato resolve contrato via:
+  - unidade MVP antiga (`data.unidades`) quando existir;
+  - ou `unidades_instaladas -> projetos -> contratos` para cadastros canonicos.
+
+Tela criada/ajustada:
+
+- `Relatorios` agora tem:
+  - cabecalho executivo;
+  - cards de pendencias por periodo;
+  - cards de manutencoes por periodo;
+  - tabela de manutencoes por contrato.
+
+Commit relacionado:
+
+- `bda14b3` - adiciona relatorios executivos de manutencao.
+
+## Exportacao PDF
+
+Pedido do usuario:
+
+- gerar os relatorios em PDF no padrao executivo para download.
+
+Implementacao:
+
+- botao `Baixar PDF` no cabecalho da tela de Relatorios;
+- captura da area renderizada dos relatorios com `html2canvas`;
+- geracao de PDF A4 multipagina com `jspdf`;
+- importacao dinamica das bibliotecas para nao carregar o peso fora do fluxo de relatorios;
+- botao ocultado durante a captura para o PDF sair como documento executivo, nao como tela de sistema.
+
+Dependencias adicionadas:
+
+- `html2canvas`
+- `jspdf`
+
+Nome do arquivo gerado:
+
+```text
+relatorio-executivo-manutencao-YYYY-MM-DD.pdf
+```
+
+Commit relacionado:
+
+- `99feb85` - adiciona exportacao PDF dos relatorios executivos.
+
+## Validacoes executadas
+
+Em cada etapa relevante foram executados:
+
+- `npm run build`
+- `npm test`
+
+Resultado atual:
+
+- build passou;
+- testes passaram;
+- aviso restante: bundle principal acima de 500 kB, sem bloquear build/deploy.
+
+## Deploy
+
+- Os commits foram enviados para `main`.
+- O deploy deve seguir pelo workflow automatico de GitHub Pages:
+  - `.github/workflows/deploy-pages.yml`
+- O ambiente local bloqueou a tentativa de iniciar servidor Vite em background com `Start-Process`.
+- Porta `5173` nao estava em uso quando checada.
+
+## Situacao atual do repositorio
+
+Ultimo commit enviado ao remoto:
+
+```text
+99feb85 Add executive reports PDF export
+```
+
+Arquivos locais nao relacionados ainda aparecem modificados/untracked e nao devem ser revertidos sem confirmacao do usuario:
+
+- `server/index.ts`
+- `server/index 2.ts`
+- `data/store(2).json`
+- `public/bootstrap(2).json`
+- `supabase/seed(2).sql`
+
+## Proximos passos recomendados
+
+1. Confirmar no GitHub Pages se o commit `99feb85` foi publicado.
+2. Testar no navegador:
+   - tela `Mapa`: 113 pinos/carregamento correto;
+   - filtros digitaveis por Estado/Cidade/Bairro/Rua;
+   - tela `Relatorios`;
+   - botao `Baixar PDF`;
+   - leitura do PDF gerado em mais de uma pagina.
+3. Caso o PDF fique muito pesado ou com corte visual, evoluir para geracao de PDF sem captura, usando layout vetorial direto em `jspdf`.
+4. Depois, retomar a migracao estrutural de OS/Atendimentos para o schema canonico, reduzindo dependencia das tabelas MVP antigas.
+
+## Prompt para retomar
+
+```text
+Leia apps/manutencao-web/docs/HANDOFF.md e retome a partir da secao "Retomada cadastros legados, mapa, dashboard e relatorios executivos — 2026-07-20". Primeiro confirme se o commit 99feb85 foi publicado no GitHub Pages; depois teste a tela Relatorios, o download em PDF e o Mapa com as 113 unidades georreferenciadas.
+```
