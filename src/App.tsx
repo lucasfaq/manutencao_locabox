@@ -298,6 +298,14 @@ export function App() {
     [visibleNavItems]
   );
   const pageTitle = page === "historico_unidade" ? "Historico da Unidade" : navItems.find((item) => item.page === page)?.label;
+  const dashboardMetrics = useMemo(() => {
+    if (!hasSupabaseConfig || !session) return data.metrics;
+    return {
+      ...data.metrics,
+      unidades: unidadesInstaladas.length,
+      estoqueBaixo: materiais.filter((item) => item.ativo && item.estoqueAtual <= item.estoqueMinimo).length
+    };
+  }, [data.metrics, materiais, session, unidadesInstaladas]);
 
   function closeActiveForm() {
     setActiveForm(null);
@@ -333,6 +341,14 @@ export function App() {
         setSource("api");
       }
     } catch (error) {
+      if (hasSupabaseConfig) {
+        setData(initialData);
+        setAtendimentoMovimentacoes({});
+        setSource("supabase");
+        setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar dados do Supabase.");
+        setLoading(false);
+        return;
+      }
       const response = await fetch(`${import.meta.env.BASE_URL}bootstrap.json`);
       const nextData = (await response.json()) as Bootstrap;
       setData(nextData);
@@ -1437,11 +1453,11 @@ export function App() {
         {page === "dashboard" && (
           <section className="content-grid">
             <div className="stats-row">
-              <StatCard label="Unidades" value={data.metrics.unidades} icon={MapPin} />
-              <StatCard label="OS abertas" value={data.metrics.ordensAbertas} icon={ClipboardList} />
-              <StatCard label="SLA vencido" value={data.metrics.slaVencidas} icon={AlertTriangle} tone="danger" />
-              <StatCard label="Atend./OS" value={data.metrics.atendimentosPorOs} icon={Wrench} />
-              <StatCard label="Estoque baixo" value={data.metrics.estoqueBaixo} icon={PackageSearch} tone="warn" />
+              <StatCard label="Unidades" value={dashboardMetrics.unidades} icon={MapPin} />
+              <StatCard label="OS abertas" value={dashboardMetrics.ordensAbertas} icon={ClipboardList} />
+              <StatCard label="SLA vencido" value={dashboardMetrics.slaVencidas} icon={AlertTriangle} tone="danger" />
+              <StatCard label="Atend./OS" value={dashboardMetrics.atendimentosPorOs} icon={Wrench} />
+              <StatCard label="Estoque baixo" value={dashboardMetrics.estoqueBaixo} icon={PackageSearch} tone="warn" />
             </div>
 
             <div className="two-columns">
@@ -2102,10 +2118,10 @@ export function App() {
 
         {page === "relatorios" && (
           <section className="reports-grid">
-            <ReportCard title="SLA" value={`${data.metrics.slaVencidas} vencidas`} icon={AlertTriangle} />
-            <ReportCard title="IPM operacional" value={`${Math.round((data.ordens.length / Math.max(data.unidades.length, 1)) * 100) / 100} OS/unidade`} icon={BarChart3} />
-            <ReportCard title="Atendimentos" value={`${data.metrics.atendimentos} registros`} icon={CheckCircle2} />
-            <ReportCard title="Estoque critico" value={`${data.metrics.estoqueBaixo} itens`} icon={PackageSearch} />
+            <ReportCard title="SLA" value={`${dashboardMetrics.slaVencidas} vencidas`} icon={AlertTriangle} />
+            <ReportCard title="IPM operacional" value={`${Math.round((data.ordens.length / Math.max(dashboardMetrics.unidades, 1)) * 100) / 100} OS/unidade`} icon={BarChart3} />
+            <ReportCard title="Atendimentos" value={`${dashboardMetrics.atendimentos} registros`} icon={CheckCircle2} />
+            <ReportCard title="Estoque critico" value={`${dashboardMetrics.estoqueBaixo} itens`} icon={PackageSearch} />
           </section>
         )}
 
