@@ -1413,7 +1413,6 @@ export async function deleteSupabaseAtendimento(atendimento: Atendimento): Promi
     throw new Error("Este atendimento possui material lancado. Para preservar o estoque, edite o relato/status em vez de excluir.");
   }
 
-  await client.from("atendimento_pendencias").delete().eq("atendimento_id", atendimento.id);
   const { error } = await client.from("atendimentos").delete().eq("id", atendimento.id);
   if (error) throw error;
 }
