@@ -10,7 +10,6 @@ grant select, insert, update, delete on table
   public.pendencias_ordem,
   public.atendimentos,
   public.atendimento_materiais,
-  public.atendimento_pendencias,
   public.estoque
 to authenticated;
 
@@ -35,12 +34,18 @@ to authenticated
 using (private.has_active_profile((select auth.uid())))
 with check (private.has_active_profile((select auth.uid())));
 
-drop policy if exists "app_active_manage_atendimento_pendencias" on public.atendimento_pendencias;
-create policy "app_active_manage_atendimento_pendencias"
-on public.atendimento_pendencias for all
-to authenticated
-using (private.has_active_profile((select auth.uid())))
-with check (private.has_active_profile((select auth.uid())));
+do $$
+begin
+  if to_regclass('public.atendimento_pendencias') is not null then
+    grant select, insert, update, delete on table public.atendimento_pendencias to authenticated;
+    drop policy if exists "app_active_manage_atendimento_pendencias" on public.atendimento_pendencias;
+    create policy "app_active_manage_atendimento_pendencias"
+    on public.atendimento_pendencias for all
+    to authenticated
+    using (private.has_active_profile((select auth.uid())))
+    with check (private.has_active_profile((select auth.uid())));
+  end if;
+end $$;
 
 create or replace function public.excluir_ordem_mvp(p_ordem_id bigint)
 returns void
@@ -69,10 +74,14 @@ begin
     raise exception 'Esta OS possui atendimento com material ou movimentacao de estoque. Exclua apenas OS sem baixa de material para preservar o estoque.';
   end if;
 
-  delete from public.atendimento_pendencias ap
-  using public.atendimentos a
-  where ap.atendimento_id = a.id
-    and a.ordem_id = p_ordem_id;
+  if to_regclass('public.atendimento_pendencias') is not null then
+    execute
+      'delete from public.atendimento_pendencias ap
+       using public.atendimentos a
+       where ap.atendimento_id = a.id
+         and a.ordem_id = $1'
+    using p_ordem_id;
+  end if;
 
   delete from public.atendimentos
   where ordem_id = p_ordem_id;
