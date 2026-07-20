@@ -437,16 +437,6 @@ main {
   font-size: 26px;
 }
 
-.maintenance-ranking table {
-  min-width: 360px;
-}
-
-.maintenance-ranking th:last-child,
-.maintenance-ranking td:last-child {
-  width: 140px;
-  text-align: center;
-}
-
 .two-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.82fr);
@@ -457,6 +447,81 @@ main {
   display: grid;
   gap: 20px;
   align-content: start;
+}
+
+.ranking-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ranking-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e2e8e3;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.ranking-position {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #e8f2ed;
+  color: #1f6f4a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ranking-content {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ranking-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ranking-row strong {
+  overflow: hidden;
+  color: #17211c;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ranking-row span {
+  min-width: 34px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #17211c;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.ranking-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eee8;
+}
+
+.ranking-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1f6f4a, #f0c94a);
 }
 
 .catalog-layout {

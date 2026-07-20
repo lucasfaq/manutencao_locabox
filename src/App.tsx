@@ -391,6 +391,11 @@ export function App() {
       });
     });
 
+    const topPendencias = [...pendencias.entries()]
+      .map(([descricao, quantidade]) => ({ descricao, quantidade }))
+      .sort((a, b) => b.quantidade - a.quantidade || a.descricao.localeCompare(b.descricao, "pt-BR"))
+      .slice(0, 10);
+
     return {
       ordensAbertas: ordensAbertas.length,
       ordensUltimos15: ordensUltimos15.length,
@@ -400,10 +405,8 @@ export function App() {
       mttr: average(mttrValues),
       mtbf: average(mtbfValues),
       slaAtendidoPercentual: ordensComAtendimento.length ? (atendidasDentroPrazo.length / ordensComAtendimento.length) * 100 : null,
-      topPendencias: [...pendencias.entries()]
-        .map(([descricao, quantidade]) => ({ descricao, quantidade }))
-        .sort((a, b) => b.quantidade - a.quantidade || a.descricao.localeCompare(b.descricao, "pt-BR"))
-        .slice(0, 10)
+      topPendencias,
+      topPendenciasMax: topPendencias[0]?.quantidade || 0
     };
   }, [data.atendimentos, data.ordens]);
 
@@ -1611,30 +1614,24 @@ export function App() {
                     <h2>Top 10 Manutencoes</h2>
                     <span>ABC das pendencias mais solicitadas</span>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Top 10 Manutencoes</th>
-                          <th>Quantidade</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {maintenanceDashboard.topPendencias.map((item) => (
-                          <tr key={item.descricao}>
-                            <td>{item.descricao}</td>
-                            <td>{item.quantidade}</td>
-                          </tr>
-                        ))}
-                        {!maintenanceDashboard.topPendencias.length && (
-                          <tr>
-                            <td colSpan={2}>
-                              <span className="empty-state">Nenhuma pendencia registrada.</span>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="ranking-list">
+                    {maintenanceDashboard.topPendencias.map((item, index) => (
+                      <article className="ranking-item" key={item.descricao}>
+                        <span className="ranking-position">{index + 1}</span>
+                        <div className="ranking-content">
+                          <div className="ranking-row">
+                            <strong>{item.descricao}</strong>
+                            <span>{item.quantidade}</span>
+                          </div>
+                          <div className="ranking-track">
+                            <span style={{ width: `${Math.max(8, (item.quantidade / maintenanceDashboard.topPendenciasMax) * 100)}%` }} />
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                    {!maintenanceDashboard.topPendencias.length && (
+                      <span className="empty-state">Nenhuma pendencia registrada.</span>
+                    )}
                   </div>
                 </section>
               </div>
