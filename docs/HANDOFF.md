@@ -1,6 +1,6 @@
 # Handoff - Manutencao Locabox
 
-Atualizado em: 2026-07-19
+Atualizado em: 2026-07-20
 
 ## Objetivo
 
@@ -266,4 +266,136 @@ Ao encerrar esta etapa, havia arquivos locais nao relacionados ao escopo que nao
 
 ```text
 Leia apps/manutencao-web/docs/HANDOFF.md e retome a partir da secao "Retomada CRUD e permissoes — 2026-07-20". Primeiro verifique o deploy do GitHub Pages, depois aplique/valide a migracao de permissoes CRUD no Supabase remoto.
+```
+
+# Retomada exclusao de OS, sidebar e estorno de materiais — 2026-07-20
+
+## Contexto da conversa
+
+O usuario reportou tres problemas principais no sistema web de manutencao:
+
+- o painel lateral de navegacao ocupava muito espaco e deveria ficar retratil;
+- a exclusao de OS/atendimento falhava por permissoes e relacoes com pendencias;
+- a OS numero 1 tinha materiais vinculados (`Fita aluminizada` e `Filtro de ar`), mas a tela nao mostrava a movimentacao nem oferecia caminho para desvincular/excluir preservando estoque.
+
+## Estado confirmado pelo usuario
+
+- O SQL anterior para corrigir `excluir_ordem_mvp` foi aplicado no Supabase remoto com sucesso.
+- A mensagem de funcao ausente deixou de ocorrer.
+- O problema restante passou a ser o bloqueio por materiais vinculados ao atendimento/OS.
+
+## Commits recentes relevantes
+
+- `72d0956` - adiciona painel lateral retratil.
+- `e674922` - mostra bloqueios de exclusao e usa RPC para excluir OS.
+- `5a73467` - exige RPC de exclusao e adiciona SQL de correcao Supabase.
+- `f519b88` - torna o SQL compativel quando `public.atendimento_pendencias` nao existe.
+- `30ea1ff` - adiciona fluxo de visualizacao e estorno de materiais de atendimento.
+
+## Arquivos alterados nesta etapa
+
+- `src/App.tsx`
+  - estado `sidebarCollapsed`;
+  - botao para recolher/expandir sidebar no desktop;
+  - carregamento de movimentacoes por atendimento;
+  - exibicao das movimentacoes na tabela de Atendimentos;
+  - botao de estorno para gestor em atendimentos com material;
+  - mensagens de bloqueio orientando o usuario a estornar antes de excluir.
+- `src/styles.css`
+  - layout da sidebar recolhida;
+  - estilos `.movement-links` para mostrar movimentacoes vinculadas.
+- `src/supabaseClient.ts`
+  - tipo `AtendimentoMovimentacao`;
+  - `loadAtendimentoMovimentacoes(...)`;
+  - `estornarSupabaseAtendimentoMateriais(...)`;
+  - `deleteSupabaseOrdem(...)` usando somente RPC `excluir_ordem_mvp`.
+- `supabase/fixes/20260720_exclusao_os_mvp.sql`
+  - grants de leitura para `estoque_materiais`, `movimentacoes` e `movimentacoes_estoque`;
+  - RPC `public.excluir_ordem_mvp(bigint)`;
+  - RPC `public.listar_atendimento_mvp_movimentacoes(bigint[])`;
+  - RPC `public.estornar_atendimento_mvp_materiais(bigint)`.
+
+## Decisao operacional sobre materiais
+
+Nao excluir silenciosamente movimentacoes de estoque.
+
+Para liberar a exclusao de atendimento/OS com material:
+
+1. manter a movimentacao original de `saida`;
+2. criar uma nova movimentacao de `entrada` com origem `Estorno Atendimento MVP #<id_atendimento>`;
+3. inserir as linhas correspondentes em `public.movimentacoes_estoque`;
+4. remover apenas os registros em `public.atendimento_materiais` para retirar o bloqueio operacional;
+5. permitir que a OS/atendimento seja excluida depois disso.
+
+Essa decisao preserva rastreabilidade e recompõe o saldo via triggers existentes de estoque.
+
+## Como testar no app
+
+1. Aplicar no Supabase remoto o SQL atualizado:
+   - `apps/manutencao-web/supabase/fixes/20260720_exclusao_os_mvp.sql`
+2. Aguardar o deploy do GitHub Pages apos o commit `30ea1ff`.
+3. Entrar como usuario gestor.
+4. Abrir `Atendimentos`.
+5. Localizar o atendimento vinculado a OS 1.
+6. Conferir se aparecem as movimentacoes `#id tipo - material - quantidade`.
+7. Clicar no botao com icone `RefreshCw` para estornar materiais.
+8. Confirmar que:
+   - o atendimento fica sem materiais vinculados;
+   - o estoque e recarregado;
+   - uma entrada de estorno aparece como movimentacao;
+   - a OS pode ser excluida pelo fluxo normal.
+
+## Validacoes feitas localmente
+
+- `npm test -- --run`: passou com 5 testes.
+- `npm run build`: passou.
+- Aviso restante do build: chunk JS acima de 500 kB, sem bloquear deploy.
+
+## Situacao do Supabase
+
+- O SQL atualizado foi copiado para a area de transferencia ao final da sessao.
+- Ainda precisa ser executado no Supabase remoto se o usuario nao tiver aplicado apos o commit `30ea1ff`.
+- As funcoes novas esperadas no banco remoto sao:
+  - `public.listar_atendimento_mvp_movimentacoes(bigint[])`;
+  - `public.estornar_atendimento_mvp_materiais(bigint)`.
+
+Consultas uteis para verificar:
+
+```sql
+select to_regprocedure('public.listar_atendimento_mvp_movimentacoes(bigint[])');
+select to_regprocedure('public.estornar_atendimento_mvp_materiais(bigint)');
+select to_regprocedure('public.excluir_ordem_mvp(bigint)');
+```
+
+## Situacao do repositorio
+
+Ultimo commit enviado ao remoto nesta etapa:
+
+```text
+30ea1ff Add attendance material reversal flow
+```
+
+Ao final, ainda existiam arquivos locais nao relacionados e nao commitados. Nao reverter sem confirmacao do usuario:
+
+- `server/index.ts`
+- `server/index 2.ts`
+- `data/store(2).json`
+- `public/bootstrap(2).json`
+- `supabase/seed(2).sql`
+
+## Proximo passo recomendado
+
+1. Confirmar se o GitHub Pages publicou o commit `30ea1ff`.
+2. Confirmar se o SQL atualizado foi aplicado no Supabase remoto.
+3. Testar especificamente a OS 1:
+   - visualizar movimentacoes da `Fita aluminizada` e `Filtro de ar`;
+   - estornar materiais;
+   - excluir atendimento, se necessario;
+   - excluir OS.
+4. Depois desse fluxo MVP estabilizar, retomar a migracao maior de OS/Atendimentos para o schema canonico.
+
+## Prompt para retomar
+
+```text
+Leia apps/manutencao-web/docs/HANDOFF.md e retome a partir da secao "Retomada exclusao de OS, sidebar e estorno de materiais — 2026-07-20". Primeiro confirme se o commit 30ea1ff foi publicado, depois valide se as RPCs listar_atendimento_mvp_movimentacoes e estornar_atendimento_mvp_materiais existem no Supabase remoto.
 ```
