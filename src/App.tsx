@@ -708,25 +708,22 @@ export function App() {
         unidade.bairro, unidade.rua, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"
       ].join(" ").toLowerCase().includes(text);
       return matchesText
-        && (!unitEstadoFilter || unidade.estado === unitEstadoFilter)
-        && (!unitCidadeFilter || unidade.cidade === unitCidadeFilter)
-        && (!unitBairroFilter || unidade.bairro === unitBairroFilter)
-        && (!unitRuaFilter || unidade.rua === unitRuaFilter);
+        && matchesTypedFilter(unidade.estado, unitEstadoFilter)
+        && matchesTypedFilter(unidade.cidade, unitCidadeFilter)
+        && matchesTypedFilter(unidade.bairro, unitBairroFilter)
+        && matchesTypedFilter(unidade.rua, unitRuaFilter);
     });
   }, [unidadesInstaladas, query, unitEstadoFilter, unitCidadeFilter, unitBairroFilter, unitRuaFilter]);
 
   const unitFilterOptions = useMemo(() => {
     const unique = (values: string[]) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-    const byEstado = unidadesInstaladas.filter((item) => !unitEstadoFilter || item.estado === unitEstadoFilter);
-    const byCidade = byEstado.filter((item) => !unitCidadeFilter || item.cidade === unitCidadeFilter);
-    const byBairro = byCidade.filter((item) => !unitBairroFilter || item.bairro === unitBairroFilter);
     return {
       estados: unique(unidadesInstaladas.map((item) => item.estado)),
-      cidades: unique(byEstado.map((item) => item.cidade)),
-      bairros: unique(byCidade.map((item) => item.bairro)),
-      ruas: unique(byBairro.map((item) => item.rua))
+      cidades: unique(unidadesInstaladas.map((item) => item.cidade)),
+      bairros: unique(unidadesInstaladas.map((item) => item.bairro)),
+      ruas: unique(unidadesInstaladas.map((item) => item.rua))
     };
-  }, [unidadesInstaladas, unitEstadoFilter, unitCidadeFilter, unitBairroFilter]);
+  }, [unidadesInstaladas]);
 
   const filteredMapaUnidades = useMemo(() => {
     const text = query.toLowerCase();
@@ -736,10 +733,10 @@ export function App() {
         unidade.bairro, unidade.rua, unidade.statusCodigo, unidade.ativo ? "ativo" : "inativo"
       ].join(" ").toLowerCase().includes(text);
       return matchesText
-        && (!unitEstadoFilter || unidade.estado === unitEstadoFilter)
-        && (!unitCidadeFilter || unidade.cidade === unitCidadeFilter)
-        && (!unitBairroFilter || unidade.bairro === unitBairroFilter)
-        && (!unitRuaFilter || unidade.rua === unitRuaFilter);
+        && matchesTypedFilter(unidade.estado, unitEstadoFilter)
+        && matchesTypedFilter(unidade.cidade, unitCidadeFilter)
+        && matchesTypedFilter(unidade.bairro, unitBairroFilter)
+        && matchesTypedFilter(unidade.rua, unitRuaFilter);
     });
   }, [mapaUnidades, query, unitEstadoFilter, unitCidadeFilter, unitBairroFilter, unitRuaFilter]);
 
@@ -2001,35 +1998,21 @@ export function App() {
               </div>
               <div className="unit-filters">
                 <label>Estado
-                  <select value={unitEstadoFilter} onChange={(event) => {
-                    setUnitEstadoFilter(event.target.value); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
-                  }}>
-                    <option value="">Todos</option>
-                    {unitFilterOptions.estados.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitEstadoFilter} onChange={(event) => setUnitEstadoFilter(event.target.value)} list="unit-filter-estados" placeholder="Digite UF ou estado" />
                 </label>
                 <label>Cidade
-                  <select value={unitCidadeFilter} onChange={(event) => {
-                    setUnitCidadeFilter(event.target.value); setUnitBairroFilter(""); setUnitRuaFilter("");
-                  }}>
-                    <option value="">Todas</option>
-                    {unitFilterOptions.cidades.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitCidadeFilter} onChange={(event) => setUnitCidadeFilter(event.target.value)} list="unit-filter-cidades" placeholder="Digite a cidade" />
                 </label>
                 <label>Bairro
-                  <select value={unitBairroFilter} onChange={(event) => {
-                    setUnitBairroFilter(event.target.value); setUnitRuaFilter("");
-                  }}>
-                    <option value="">Todos</option>
-                    {unitFilterOptions.bairros.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitBairroFilter} onChange={(event) => setUnitBairroFilter(event.target.value)} list="unit-filter-bairros" placeholder="Digite o bairro" />
                 </label>
                 <label>Rua
-                  <select value={unitRuaFilter} onChange={(event) => setUnitRuaFilter(event.target.value)}>
-                    <option value="">Todas</option>
-                    {unitFilterOptions.ruas.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitRuaFilter} onChange={(event) => setUnitRuaFilter(event.target.value)} list="unit-filter-ruas" placeholder="Digite a rua" />
                 </label>
+                <datalist id="unit-filter-estados">{unitFilterOptions.estados.map((value) => <option key={value} value={value} />)}</datalist>
+                <datalist id="unit-filter-cidades">{unitFilterOptions.cidades.map((value) => <option key={value} value={value} />)}</datalist>
+                <datalist id="unit-filter-bairros">{unitFilterOptions.bairros.map((value) => <option key={value} value={value} />)}</datalist>
+                <datalist id="unit-filter-ruas">{unitFilterOptions.ruas.map((value) => <option key={value} value={value} />)}</datalist>
                 <button
                   type="button"
                   className="clear-filters-button"
@@ -2076,35 +2059,21 @@ export function App() {
               </div>
               <div className="unit-filters">
                 <label>Estado
-                  <select value={unitEstadoFilter} onChange={(event) => {
-                    setUnitEstadoFilter(event.target.value); setUnitCidadeFilter(""); setUnitBairroFilter(""); setUnitRuaFilter("");
-                  }}>
-                    <option value="">Todos</option>
-                    {unitFilterOptions.estados.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitEstadoFilter} onChange={(event) => setUnitEstadoFilter(event.target.value)} list="map-filter-estados" placeholder="Digite UF ou estado" />
                 </label>
                 <label>Cidade
-                  <select value={unitCidadeFilter} onChange={(event) => {
-                    setUnitCidadeFilter(event.target.value); setUnitBairroFilter(""); setUnitRuaFilter("");
-                  }}>
-                    <option value="">Todas</option>
-                    {unitFilterOptions.cidades.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitCidadeFilter} onChange={(event) => setUnitCidadeFilter(event.target.value)} list="map-filter-cidades" placeholder="Digite a cidade" />
                 </label>
                 <label>Bairro
-                  <select value={unitBairroFilter} onChange={(event) => {
-                    setUnitBairroFilter(event.target.value); setUnitRuaFilter("");
-                  }}>
-                    <option value="">Todos</option>
-                    {unitFilterOptions.bairros.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitBairroFilter} onChange={(event) => setUnitBairroFilter(event.target.value)} list="map-filter-bairros" placeholder="Digite o bairro" />
                 </label>
                 <label>Rua
-                  <select value={unitRuaFilter} onChange={(event) => setUnitRuaFilter(event.target.value)}>
-                    <option value="">Todas</option>
-                    {unitFilterOptions.ruas.map((value) => <option key={value}>{value}</option>)}
-                  </select>
+                  <input value={unitRuaFilter} onChange={(event) => setUnitRuaFilter(event.target.value)} list="map-filter-ruas" placeholder="Digite a rua" />
                 </label>
+                <datalist id="map-filter-estados">{unitFilterOptions.estados.map((value) => <option key={value} value={value} />)}</datalist>
+                <datalist id="map-filter-cidades">{unitFilterOptions.cidades.map((value) => <option key={value} value={value} />)}</datalist>
+                <datalist id="map-filter-bairros">{unitFilterOptions.bairros.map((value) => <option key={value} value={value} />)}</datalist>
+                <datalist id="map-filter-ruas">{unitFilterOptions.ruas.map((value) => <option key={value} value={value} />)}</datalist>
                 <button
                   type="button"
                   className="clear-filters-button"
@@ -2377,6 +2346,20 @@ function formatDateTime(value: string | null) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function normalizeFilterText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function matchesTypedFilter(value: string, filter: string) {
+  const normalizedFilter = normalizeFilterText(filter);
+  if (!normalizedFilter) return true;
+  return normalizeFilterText(value || "").includes(normalizedFilter);
+}
+
 function unitMarkerIcon(unidade: MapaUnidade) {
   const tone = !unidade.ativo ? "inactive" : unidade.statusCodigo.includes("manut") ? "warn" : "ok";
   return L.divIcon({
@@ -2415,12 +2398,14 @@ function UnidadesMap({
 }) {
   const located = unidades.filter((unidade) => unidade.latitude != null && unidade.longitude != null);
   const unlocated = unidades.filter((unidade) => unidade.latitude == null || unidade.longitude == null);
+  const missingMapLinks = unlocated.filter((unidade) => !unidade.googleMapsUrl);
+  const linksWithoutCoordinates = unlocated.filter((unidade) => unidade.googleMapsUrl);
 
   return (
     <div className="map-layout">
       <div className="map-shell">
         {located.length ? (
-          <MapContainer center={[-5.2, -39.5]} zoom={7} scrollWheelZoom className="units-map">
+          <MapContainer key={located.map((unidade) => unidade.idUnidade).join("-")} center={[-5.2, -39.5]} zoom={7} scrollWheelZoom className="units-map">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -2466,14 +2451,36 @@ function UnidadesMap({
           <span>Sem coordenadas</span>
           <strong>{unlocated.length}</strong>
         </article>
+        <article>
+          <span>Links sem coordenada</span>
+          <strong>{linksWithoutCoordinates.length}</strong>
+        </article>
+        <article>
+          <span>Sem link</span>
+          <strong>{missingMapLinks.length}</strong>
+        </article>
         <div className="unlocated-list">
-          <h3>Sem pin no mapa</h3>
-          {unlocated.slice(0, 8).map((unidade) => (
+          <h3>Links sem coordenada</h3>
+          {linksWithoutCoordinates.slice(0, 10).map((unidade) => (
             <div key={unidade.idUnidade}>
               <strong>{unidade.nome}</strong>
-              <small>{[unidade.cidade, unidade.estado].filter(Boolean).join(" / ") || "Localizacao nao informada"}</small>
+              <small>{[unidade.rua, unidade.bairro, unidade.cidade, unidade.estado].filter(Boolean).join(" / ") || "Localizacao nao informada"}</small>
+              <a className="map-link" href={unidade.googleMapsUrl} target="_blank" rel="noreferrer">Abrir link cadastrado</a>
             </div>
           ))}
+          {linksWithoutCoordinates.length > 10 && <small>Mais {linksWithoutCoordinates.length - 10} unidades com link sem coordenada.</small>}
+          {!linksWithoutCoordinates.length && <span className="empty-state">Nenhum link pendente de coordenada.</span>}
+        </div>
+        <div className="unlocated-list">
+          <h3>Sem link do mapa</h3>
+          {missingMapLinks.slice(0, 10).map((unidade) => (
+            <div key={unidade.idUnidade}>
+              <strong>{unidade.nome}</strong>
+              <small>{[unidade.rua, unidade.bairro, unidade.cidade, unidade.estado].filter(Boolean).join(" / ") || "Localizacao nao informada"}</small>
+            </div>
+          ))}
+          {missingMapLinks.length > 10 && <small>Mais {missingMapLinks.length - 10} unidades sem link cadastrado.</small>}
+          {!missingMapLinks.length && <span className="empty-state">Todas as unidades filtradas possuem link cadastrado.</span>}
           {!unlocated.length && <span className="empty-state">Todas as unidades filtradas possuem coordenadas.</span>}
         </div>
       </aside>

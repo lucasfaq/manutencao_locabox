@@ -72,6 +72,18 @@ function SqlDate($value) {
   return SqlString $text.Substring(0, [Math]::Min(10, $text.Length))
 }
 
+function Extract-CoordinatesFromMapLink($value) {
+  $text = if ($null -eq $value) { "" } else { ([string]$value).Trim() }
+  if ($text -eq "") { return @{ latitude = "null"; longitude = "null" } }
+  $decoded = [uri]::UnescapeDataString($text)
+  $match = [regex]::Match($decoded, '@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)')
+  if (-not $match.Success) {
+    $match = [regex]::Match($decoded, '!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)')
+  }
+  if (-not $match.Success) { return @{ latitude = "null"; longitude = "null" } }
+  return @{ latitude = $match.Groups[1].Value; longitude = $match.Groups[2].Value }
+}
+
 function Normalize-Cnpj($value) {
   $text = if ($null -eq $value) { "" } else { ([string]$value).Trim() }
   if ($text -eq "") { return "" }
@@ -288,7 +300,8 @@ foreach ($unidade in $unidades) {
   $codigo = if ($null -eq $unidade.TIU -or ([string]$unidade.TIU).Trim() -eq "") { "LEGADO-$($unidade.ID_Unidade)" } else { ([string]$unidade.TIU).Trim() }
   $nomeBase = if ($null -ne $unidade.Descricao -and ([string]$unidade.Descricao).Trim() -ne "") { $unidade.Descricao } elseif ($null -ne $unidade.Tipo_Unidade -and ([string]$unidade.Tipo_Unidade).Trim() -ne "") { $unidade.Tipo_Unidade } else { "Unidade $($unidade.ID_Unidade)" }
   $statusLabel = $statusById[[int]$unidade.ID_Status_Unidade]
-  Add-Insert $sql "unidades_instaladas" @("id_unidade", "id_projeto", "codigo", "nome", "estado", "cidade", "bairro", "rua", "google_maps_url", "status_codigo", "ativo") @(
+  $coordinates = Extract-CoordinatesFromMapLink $unidade.LinkGM
+  Add-Insert $sql "unidades_instaladas" @("id_unidade", "id_projeto", "codigo", "nome", "estado", "cidade", "bairro", "rua", "google_maps_url", "latitude", "longitude", "status_codigo", "ativo") @(
     [int]$unidade.ID_Unidade,
     [int]$unidade.ID_Projeto,
     (SqlString $codigo),
@@ -298,9 +311,11 @@ foreach ($unidade in $unidades) {
     (SqlText $location.bairro),
     (SqlText $location.rua),
     (SqlText $unidade.LinkGM),
+    $coordinates.latitude,
+    $coordinates.longitude,
     (SqlString (Normalize-StatusUnidade $statusLabel)),
     "true"
-  ) @("id_projeto", "codigo", "nome", "estado", "cidade", "bairro", "rua", "google_maps_url", "status_codigo", "ativo", "atualizado_em")
+  ) @("id_projeto", "codigo", "nome", "estado", "cidade", "bairro", "rua", "google_maps_url", "latitude", "longitude", "status_codigo", "ativo", "atualizado_em")
 }
 
 $sql.Add("select setval(pg_get_serial_sequence('public.clientes', 'id_cliente'), coalesce((select max(id_cliente) from public.clientes), 1), true);")

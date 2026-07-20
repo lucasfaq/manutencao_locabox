@@ -937,13 +937,23 @@ main {
   font-weight: 700;
 }
 
-.unit-filters select {
+.unit-filters select,
+.unit-filters input {
   min-width: 0;
   border: 1px solid #d7dfd8;
   border-radius: 8px;
   padding: 10px 11px;
   color: #17211c;
   background: #fbfcfa;
+}
+
+.unit-filters input::placeholder {
+  color: #8a978f;
+}
+
+.unit-filters input:focus {
+  outline: 3px solid rgba(79, 139, 91, 0.18);
+  border-color: #78a983;
 }
 
 .unit-filters .clear-filters-button {
@@ -1064,6 +1074,9 @@ main {
   display: grid;
   align-content: start;
   gap: 10px;
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .map-side-panel article,
@@ -1107,6 +1120,11 @@ main {
   border: 1px solid #edf1ee;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.unlocated-list .map-link {
+  justify-self: start;
+  font-size: 12px;
 }
 
 .unlocated-list small {
