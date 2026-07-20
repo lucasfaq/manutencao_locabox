@@ -236,13 +236,17 @@ function StatusPill({ value }: { value: string }) {
   return <span className={`pill ${tone}`}>{value}</span>;
 }
 
-function DashboardKpi({ title, subtitle, value }: { title: string; subtitle: string; value: number | string }) {
+function StatCard({ label, value, icon: Icon, tone }: { label: string; value: number | string; icon: typeof LayoutDashboard; tone?: string }) {
   return (
-    <article className="dashboard-kpi">
-      <strong>{title}</strong>
-      <span>{subtitle}</span>
-      <p>{value}</p>
-    </article>
+    <div className={`stat-card ${tone || ""}`}>
+      <div className="stat-icon">
+        <Icon size={18} />
+      </div>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+      </div>
+    </div>
   );
 }
 
@@ -1548,58 +1552,92 @@ export function App() {
 
         {page === "dashboard" && (
           <section className="content-grid">
-            <section className="maintenance-kpis">
-              <DashboardKpi title="Ordens de Manutencao" subtitle="Em Aberto" value={maintenanceDashboard.ordensAbertas} />
-              <DashboardKpi title="Ordens de Manutencao" subtitle="Ultimos 15 dias" value={maintenanceDashboard.ordensUltimos15} />
-              <DashboardKpi title="Ordens de Manutencao" subtitle="Em Aberto > 15 dias" value={maintenanceDashboard.ordensAbertasMais15} />
-              <DashboardKpi title="Atendimentos" subtitle="Ultimos 30 dias" value={maintenanceDashboard.atendimentosUltimos30} />
-              <DashboardKpi title="Tempo Medio de Atendimento" subtitle="MTTA" value={formatDays(maintenanceDashboard.mtta)} />
-              <DashboardKpi title="Tempo Medio de Finalizacao" subtitle="MTTR" value={formatDays(maintenanceDashboard.mttr)} />
-              <DashboardKpi title="Tempo Medio Entre Ordens" subtitle="MTBF" value={formatDays(maintenanceDashboard.mtbf)} />
-              <DashboardKpi title="% Ordens Atendidas Dentro do Prazo" subtitle="SLA" value={formatPercent(maintenanceDashboard.slaAtendidoPercentual)} />
-            </section>
+            <div className="stats-row">
+              <StatCard label="Unidades" value={dashboardMetrics.unidades} icon={MapPin} />
+              <StatCard label="OS abertas" value={dashboardMetrics.ordensAbertas} icon={ClipboardList} />
+              <StatCard label="OS ultimos 15 dias" value={maintenanceDashboard.ordensUltimos15} icon={CalendarClock} />
+              <StatCard label="OS abertas > 15 dias" value={maintenanceDashboard.ordensAbertasMais15} icon={AlertTriangle} tone="danger" />
+              <StatCard label="Atend. ultimos 30 dias" value={maintenanceDashboard.atendimentosUltimos30} icon={Wrench} />
+              <StatCard label="MTTA" value={formatDays(maintenanceDashboard.mtta)} icon={CalendarClock} />
+              <StatCard label="MTTR" value={formatDays(maintenanceDashboard.mttr)} icon={CheckCircle2} />
+              <StatCard label="MTBF" value={formatDays(maintenanceDashboard.mtbf)} icon={BarChart3} />
+              <StatCard label="SLA no prazo" value={formatPercent(maintenanceDashboard.slaAtendidoPercentual)} icon={ShieldCheck} />
+              <StatCard label="SLA vencido" value={dashboardMetrics.slaVencidas} icon={AlertTriangle} tone="danger" />
+              <StatCard label="Atend./OS" value={dashboardMetrics.atendimentosPorOs} icon={Wrench} />
+              <StatCard label="Estoque baixo" value={dashboardMetrics.estoqueBaixo} icon={PackageSearch} tone="warn" />
+            </div>
 
-            <div className="maintenance-dashboard-grid">
-              <section className="panel maintenance-ranking">
+            <div className="two-columns">
+              <section className="panel">
                 <div className="panel-heading">
-                  <h2>Top 10 Manutencoes</h2>
-                  <span>ABC das pendencias mais solicitadas</span>
+                  <h2>OS prioritarias</h2>
+                  <div className="heading-actions">
+                    <button onClick={() => setPage("ordens")}>Ver OS</button>
+                    <button onClick={() => { setSelectedOrdem(null); setActiveForm("ordem"); }}>Nova OS</button>
+                  </div>
                 </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Top 10 Manutencoes</th>
-                        <th>Quantidade</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {maintenanceDashboard.topPendencias.map((item) => (
-                        <tr key={item.descricao}>
-                          <td>{item.descricao}</td>
-                          <td>{item.quantidade}</td>
-                        </tr>
-                      ))}
-                      {!maintenanceDashboard.topPendencias.length && (
-                        <tr>
-                          <td colSpan={2}>
-                            <span className="empty-state">Nenhuma pendencia registrada.</span>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                <div className="order-list">
+                  {filteredOrdens.slice(0, 5).map((ordem) => {
+                    const unidade = findUnidade(data.unidades, ordem);
+                    const sla = getSla(ordem);
+                    return (
+                      <article key={ordem.id} className="order-card">
+                        <div>
+                          <strong>{ordem.protocolo}</strong>
+                          <span>{unidade?.nome} · {unidade?.municipio}</span>
+                        </div>
+                        <div className="card-meta">
+                          <span className={`pill ${sla.tone}`}>{sla.label}</span>
+                          <StatusPill value={ordem.status} />
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
 
-              <section className="panel quick-dashboard-actions">
-                <div className="panel-heading"><h2>Consultas rapidas</h2><span>Acesso aos detalhes</span></div>
-                <div className="quick-actions">
-                  <button type="button" onClick={() => setPage("ordens")}><ClipboardList size={16} />OS</button>
-                  <button type="button" onClick={() => setPage("atendimentos")}><Wrench size={16} />Atendimentos</button>
-                  <button type="button" onClick={() => setPage("pendencias")}><ClipboardList size={16} />Pendencias</button>
-                </div>
-              </section>
+              <div className="dashboard-side-stack">
+                <section className="panel">
+                  <div className="panel-heading"><h2>Consultas rapidas</h2><span>Use os menus para filtrar e abrir cadastros.</span></div>
+                  <div className="quick-actions">
+                    <button type="button" onClick={() => setPage("atendimentos")}><Wrench size={16} />Atendimentos</button>
+                    <button type="button" onClick={() => setPage("estoque")}><Boxes size={16} />Estoque</button>
+                    <button type="button" onClick={() => setPage("mapa")}><MapPinned size={16} />Mapa</button>
+                  </div>
+                </section>
+
+                <section className="panel maintenance-ranking">
+                  <div className="panel-heading">
+                    <h2>Top 10 Manutencoes</h2>
+                    <span>ABC das pendencias mais solicitadas</span>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Top 10 Manutencoes</th>
+                          <th>Quantidade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {maintenanceDashboard.topPendencias.map((item) => (
+                          <tr key={item.descricao}>
+                            <td>{item.descricao}</td>
+                            <td>{item.quantidade}</td>
+                          </tr>
+                        ))}
+                        {!maintenanceDashboard.topPendencias.length && (
+                          <tr>
+                            <td colSpan={2}>
+                              <span className="empty-state">Nenhuma pendencia registrada.</span>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
             </div>
           </section>
         )}
