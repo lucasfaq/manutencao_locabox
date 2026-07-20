@@ -55,7 +55,8 @@ describe("maintenance logic", () => {
       { id: 2, ordemId: 11, materiais: ["Filtro | qtd: 1 | uso: consumo"] }
     ];
 
-    assert.equal(podeExcluirOrdem(10, atendimentos), false);
+    assert.equal(podeExcluirOrdem(10, atendimentos), true);
+    assert.equal(podeExcluirOrdem(11, atendimentos), false);
     assert.equal(podeExcluirOrdem(99, atendimentos), true);
     assert.equal(podeExcluirAtendimento(atendimentos[0]), true);
     assert.equal(podeExcluirAtendimento(atendimentos[1]), false);

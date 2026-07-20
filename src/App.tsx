@@ -1035,17 +1035,24 @@ export function App() {
   }
 
   async function deleteOrdem(ordem: Ordem) {
-    const totalAtendimentos = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id).length;
-    if (totalAtendimentos > 0) {
-      setErrorMessage("Esta OS ja possui atendimento registrado. Para preservar o historico, altere o status em vez de excluir.");
+    const atendimentosDaOrdem = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id);
+    const hasMateriais = atendimentosDaOrdem.some((atendimento) => atendimento.materiais.length > 0);
+    if (hasMateriais) {
+      setErrorMessage("Esta OS possui atendimento com material ou movimentacao de estoque. Exclua apenas OS sem baixa de material para preservar o estoque.");
       return;
     }
-    if (!window.confirm(`Excluir a OS ${ordem.protocolo}?`)) return;
+    const detail = atendimentosDaOrdem.length ? ` e ${atendimentosDaOrdem.length} atendimento(s) vinculado(s)` : "";
+    if (!window.confirm(`Excluir a OS ${ordem.protocolo}${detail}?`)) return;
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) await deleteSupabaseOrdem(ordem);
-      setData((current) => withMetrics({ ...current, ordens: current.ordens.filter((item) => item.id !== ordem.id) }));
+      setData((current) => withMetrics({
+        ...current,
+        ordens: current.ordens.filter((item) => item.id !== ordem.id),
+        atendimentos: current.atendimentos.filter((item) => item.ordemId !== ordem.id)
+      }));
       if (selectedOrdem?.id === ordem.id) setSelectedOrdem(null);
+      if (selectedAtendimento?.ordemId === ordem.id) setSelectedAtendimento(null);
       if (hasSupabaseConfig) await load();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao excluir OS.");

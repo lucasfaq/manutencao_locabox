@@ -71,7 +71,9 @@ export function podeExcluirAtendimento(atendimento: AtendimentoLike): boolean {
 }
 
 export function podeExcluirOrdem(ordemId: number, atendimentos: AtendimentoLike[]): boolean {
-  return !atendimentos.some((atendimento) => atendimento.ordemId === ordemId);
+  return atendimentos
+    .filter((atendimento) => atendimento.ordemId === ordemId)
+    .every((atendimento) => podeExcluirAtendimento(atendimento));
 }
 
 export function montarResponsaveisSelecionados(values: string[]): string {
