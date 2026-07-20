@@ -139,6 +139,25 @@ type ActiveForm =
   | "own-password"
   | null;
 type ResponsavelOption = { value: string; label: string; detail: string };
+type ReportPeriod = "week" | "days30" | "days60" | "months12";
+type ReportPeriodSummary = {
+  key: ReportPeriod;
+  label: string;
+  subtitle: string;
+  total: number;
+  secondary: string;
+  topItems: Array<{ label: string; value: number; detail: string }>;
+};
+type ContractMaintenanceSummary = {
+  contrato: string;
+  cliente: string;
+  total: number;
+  executadas: number;
+  parciais: number;
+  reagendadas: number;
+  unidades: number;
+  ultimaData: string | null;
+};
 
 const initialData: Bootstrap = {
   unidades: [],
@@ -421,6 +440,142 @@ export function App() {
       topPendenciasMax: topPendencias[0]?.quantidade || 0
     };
   }, [data.atendimentos, data.ordens]);
+
+  const executiveReports = useMemo(() => {
+    const today = startOfDay(new Date());
+    const reportPeriods = buildReportPeriods(today);
+    const ordemById = new Map(data.ordens.map((ordem) => [ordem.id, ordem]));
+    const legacyUnitById = new Map(data.unidades.map((unidade) => [unidade.id, unidade]));
+    const installedUnitById = new Map(unidadesInstaladas.map((unidade) => [unidade.idUnidade, unidade]));
+    const projetoById = new Map(projetos.map((projeto) => [projeto.idProjeto, projeto]));
+    const contratoByNumero = new Map(contratos.map((contrato) => [contrato.numeroContrato, contrato]));
+    const contratoById = new Map(contratos.map((contrato) => [contrato.idContrato, contrato]));
+
+    const resolveContract = (ordem: Ordem) => {
+      const legacyUnit = legacyUnitById.get(ordem.unidadeId);
+      if (legacyUnit?.contrato) {
+        const contrato = contratoByNumero.get(legacyUnit.contrato);
+        return {
+          contrato: legacyUnit.contrato,
+          cliente: contrato?.clienteNome || legacyUnit.cliente || "Cliente nao informado",
+          unidade: legacyUnit.nome || "Unidade nao informada"
+        };
+      }
+
+      const installedUnit = installedUnitById.get(ordem.unidadeId);
+      const projeto = installedUnit ? projetoById.get(installedUnit.idProjeto) : undefined;
+      const contrato = projeto ? contratoById.get(projeto.idContrato) : undefined;
+      return {
+        contrato: projeto?.contratoNumero || contrato?.numeroContrato || "Contrato nao informado",
+        cliente: contrato?.clienteNome || "Cliente nao informado",
+        unidade: installedUnit?.nome || "Unidade nao informada"
+      };
+    };
+
+    const pendenciasPorPeriodo: ReportPeriodSummary[] = reportPeriods.map((period) => {
+      const pendencias = new Map<string, { total: number; abertas: number; concluidas: number }>();
+
+      data.ordens.forEach((ordem) => {
+        const abertura = parseLocalDate(ordem.abertura);
+        if (!abertura || abertura < period.start || abertura > today) return;
+        const pendenciasDetalhes = ordem.pendenciasDetalhes.length
+          ? ordem.pendenciasDetalhes
+          : ordem.pendencias.map((descricao) => ({ id: 0, descricao, status: "Aberta" as const }));
+
+        pendenciasDetalhes.forEach((pendencia) => {
+          const descricao = pendencia.descricao.trim();
+          if (!descricao) return;
+          const current = pendencias.get(descricao) || { total: 0, abertas: 0, concluidas: 0 };
+          current.total += 1;
+          if (pendencia.status === "Concluida") current.concluidas += 1;
+          else current.abertas += 1;
+          pendencias.set(descricao, current);
+        });
+      });
+
+      const topItems = [...pendencias.entries()]
+        .map(([label, values]) => ({ label, value: values.total, detail: `${values.abertas} abertas / ${values.concluidas} concluidas` }))
+        .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "pt-BR"))
+        .slice(0, 5);
+      const total = [...pendencias.values()].reduce((sum, item) => sum + item.total, 0);
+
+      return {
+        key: period.key,
+        label: period.label,
+        subtitle: period.subtitle,
+        total,
+        secondary: `${pendencias.size} tipos recorrentes`,
+        topItems
+      };
+    });
+
+    const manutencoesPorPeriodo: ReportPeriodSummary[] = reportPeriods.map((period) => {
+      const atendimentosPeriodo = data.atendimentos.filter((atendimento) => {
+        const date = parseLocalDate(atendimento.data);
+        return date ? date >= period.start && date <= today : false;
+      });
+      const porStatus = new Map<string, number>();
+      atendimentosPeriodo.forEach((atendimento) => porStatus.set(atendimento.status, (porStatus.get(atendimento.status) || 0) + 1));
+      const topItems = [...porStatus.entries()]
+        .map(([label, value]) => ({ label, value, detail: label === "Executado" ? "manutencoes realizadas" : "demanda com retorno operacional" }))
+        .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "pt-BR"));
+      const executadas = porStatus.get("Executado") || 0;
+
+      return {
+        key: period.key,
+        label: period.label,
+        subtitle: period.subtitle,
+        total: executadas,
+        secondary: `${atendimentosPeriodo.length} atendimentos registrados`,
+        topItems
+      };
+    });
+
+    const contratosMap = new Map<string, ContractMaintenanceSummary>();
+    data.atendimentos.forEach((atendimento) => {
+      const ordem = ordemById.get(atendimento.ordemId);
+      if (!ordem) return;
+      const relation = resolveContract(ordem);
+      const key = relation.contrato || "Contrato nao informado";
+      const current = contratosMap.get(key) || {
+        contrato: key,
+        cliente: relation.cliente,
+        total: 0,
+        executadas: 0,
+        parciais: 0,
+        reagendadas: 0,
+        unidades: 0,
+        ultimaData: null
+      };
+      current.total += 1;
+      if (atendimento.status === "Executado") current.executadas += 1;
+      if (atendimento.status === "Parcial") current.parciais += 1;
+      if (atendimento.status === "Reagendado") current.reagendadas += 1;
+      current.ultimaData = latestDate(current.ultimaData, atendimento.data);
+      contratosMap.set(key, current);
+    });
+
+    const unidadesPorContrato = new Map<string, Set<number>>();
+    data.ordens.forEach((ordem) => {
+      const relation = resolveContract(ordem);
+      const key = relation.contrato || "Contrato nao informado";
+      if (!unidadesPorContrato.has(key)) unidadesPorContrato.set(key, new Set());
+      unidadesPorContrato.get(key)!.add(ordem.unidadeId);
+    });
+    unidadesPorContrato.forEach((unidades, contrato) => {
+      const current = contratosMap.get(contrato);
+      if (current) current.unidades = unidades.size;
+    });
+
+    const manutencoesPorContrato = [...contratosMap.values()]
+      .sort((a, b) => b.total - a.total || a.contrato.localeCompare(b.contrato, "pt-BR"));
+
+    return {
+      pendenciasPorPeriodo,
+      manutencoesPorPeriodo,
+      manutencoesPorContrato
+    };
+  }, [contratos, data.atendimentos, data.ordens, data.unidades, projetos, unidadesInstaladas]);
 
   function closeActiveForm() {
     setActiveForm(null);
@@ -2236,11 +2391,90 @@ export function App() {
         )}
 
         {page === "relatorios" && (
-          <section className="reports-grid">
-            <ReportCard title="SLA" value={`${dashboardMetrics.slaVencidas} vencidas`} icon={AlertTriangle} />
-            <ReportCard title="IPM operacional" value={`${Math.round((data.ordens.length / Math.max(dashboardMetrics.unidades, 1)) * 100) / 100} OS/unidade`} icon={BarChart3} />
-            <ReportCard title="Atendimentos" value={`${dashboardMetrics.atendimentos} registros`} icon={CheckCircle2} />
-            <ReportCard title="Estoque critico" value={`${dashboardMetrics.estoqueBaixo} itens`} icon={PackageSearch} />
+          <section className="reports-page">
+            <section className="executive-report-hero">
+              <div>
+                <span>Relatorios executivos</span>
+                <h2>Manutencao ITP / Locabox</h2>
+              </div>
+              <div className="executive-report-meta">
+                <strong>{new Date().toLocaleDateString("pt-BR")}</strong>
+                <span>{data.ordens.length} OS / {data.atendimentos.length} atendimentos</span>
+              </div>
+            </section>
+
+            <section className="executive-report-section">
+              <div className="report-section-heading">
+                <div>
+                  <span>Carteira operacional</span>
+                  <h3>Pendencias por periodo</h3>
+                </div>
+                <strong>{maintenanceDashboard.topPendencias.length} pendencias recorrentes no ABC</strong>
+              </div>
+              <div className="period-report-grid">
+                {executiveReports.pendenciasPorPeriodo.map((report) => (
+                  <PeriodReportCard key={report.key} report={report} icon={ClipboardList} />
+                ))}
+              </div>
+            </section>
+
+            <section className="executive-report-section">
+              <div className="report-section-heading">
+                <div>
+                  <span>Execucao de campo</span>
+                  <h3>Manutencoes realizadas por periodo</h3>
+                </div>
+                <strong>{formatPercent(maintenanceDashboard.slaAtendidoPercentual)} SLA no prazo</strong>
+              </div>
+              <div className="period-report-grid">
+                {executiveReports.manutencoesPorPeriodo.map((report) => (
+                  <PeriodReportCard key={report.key} report={report} icon={CheckCircle2} />
+                ))}
+              </div>
+            </section>
+
+            <section className="executive-report-section">
+              <div className="report-section-heading">
+                <div>
+                  <span>Contratos</span>
+                  <h3>Manutencoes por contrato</h3>
+                </div>
+                <strong>{executiveReports.manutencoesPorContrato.length} contratos com movimentacao</strong>
+              </div>
+              <div className="table-wrap executive-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Contrato</th>
+                      <th>Cliente</th>
+                      <th>Total</th>
+                      <th>Executadas</th>
+                      <th>Parciais</th>
+                      <th>Reagendadas</th>
+                      <th>Unidades</th>
+                      <th>Ultima manutencao</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {executiveReports.manutencoesPorContrato.map((item) => (
+                      <tr key={item.contrato}>
+                        <td><strong>{item.contrato}</strong></td>
+                        <td>{item.cliente}</td>
+                        <td>{item.total}</td>
+                        <td>{item.executadas}</td>
+                        <td>{item.parciais}</td>
+                        <td>{item.reagendadas}</td>
+                        <td>{item.unidades}</td>
+                        <td>{formatDateTime(item.ultimaData)}</td>
+                      </tr>
+                    ))}
+                    {!executiveReports.manutencoesPorContrato.length && (
+                      <tr><td colSpan={8}><span className="empty-state">Nenhuma manutencao registrada por contrato.</span></td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </section>
         )}
 
@@ -2344,6 +2578,41 @@ function FormModal({ title, children, onClose, wide }: { title: string; children
 function formatDateTime(value: string | null) {
   if (!value) return "Sem registro";
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function startOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function subtractDays(value: Date, days: number) {
+  const date = startOfDay(value);
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+function subtractMonths(value: Date, months: number) {
+  const date = startOfDay(value);
+  date.setMonth(date.getMonth() - months);
+  return date;
+}
+
+function buildReportPeriods(today: Date): Array<{ key: ReportPeriod; label: string; subtitle: string; start: Date }> {
+  return [
+    { key: "week", label: "Semana", subtitle: "Ultimos 7 dias", start: subtractDays(today, 7) },
+    { key: "days30", label: "30 dias", subtitle: "Janela movel", start: subtractDays(today, 30) },
+    { key: "days60", label: "60 dias", subtitle: "Janela movel", start: subtractDays(today, 60) },
+    { key: "months12", label: "12 meses", subtitle: "Historico anual", start: subtractMonths(today, 12) }
+  ];
+}
+
+function latestDate(current: string | null, next: string) {
+  const currentDate = current ? parseLocalDate(current) : null;
+  const nextDate = parseLocalDate(next);
+  if (!nextDate) return current;
+  if (!currentDate || nextDate > currentDate) return next;
+  return current;
 }
 
 function normalizeFilterText(value: string) {
@@ -3271,12 +3540,34 @@ function EstoqueMovimentacaoForm({ materiais, onSubmit }: {
   );
 }
 
-function ReportCard({ title, value, icon: Icon }: { title: string; value: string; icon: typeof AlertTriangle }) {
+function PeriodReportCard({ report, icon: Icon }: { report: ReportPeriodSummary; icon: typeof AlertTriangle }) {
+  const max = Math.max(...report.topItems.map((item) => item.value), 1);
   return (
-    <article className="report-card">
-      <Icon size={22} />
-      <span>{title}</span>
-      <strong>{value}</strong>
+    <article className="period-report-card">
+      <div className="period-card-heading">
+        <Icon size={20} />
+        <div>
+          <span>{report.subtitle}</span>
+          <strong>{report.label}</strong>
+        </div>
+      </div>
+      <div className="period-card-total">
+        <strong>{report.total}</strong>
+        <span>{report.secondary}</span>
+      </div>
+      <div className="period-ranking">
+        {report.topItems.map((item) => (
+          <div key={item.label} className="period-ranking-row">
+            <div>
+              <strong>{item.label}</strong>
+              <span>{item.detail}</span>
+            </div>
+            <b>{item.value}</b>
+            <i style={{ width: `${Math.max(8, (item.value / max) * 100)}%` }} />
+          </div>
+        ))}
+        {!report.topItems.length && <span className="empty-state">Sem registros no periodo.</span>}
+      </div>
     </article>
   );
 }

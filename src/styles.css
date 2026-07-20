@@ -1520,6 +1520,156 @@ td small.relation-warning {
   font-size: 24px;
 }
 
+.reports-page {
+  display: grid;
+  gap: 18px;
+}
+
+.executive-report-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding: 22px;
+  border: 1px solid #dfe7e1;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f8fbf8 0%, #eef5ef 100%);
+}
+
+.executive-report-hero span,
+.report-section-heading span,
+.executive-report-meta span {
+  color: #66746c;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.executive-report-hero h2,
+.report-section-heading h3 {
+  margin: 4px 0 0;
+  color: #17211c;
+}
+
+.executive-report-meta {
+  display: grid;
+  gap: 4px;
+  text-align: right;
+}
+
+.executive-report-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #e1e8e3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.report-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e7ece8;
+}
+
+.report-section-heading > strong {
+  color: #285c36;
+  font-size: 13px;
+}
+
+.period-report-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.period-report-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e0e7e2;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.period-card-heading {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.period-card-heading svg {
+  color: #285c36;
+}
+
+.period-card-heading span,
+.period-card-total span,
+.period-ranking-row span {
+  display: block;
+  color: #66746c;
+  font-size: 12px;
+}
+
+.period-card-heading strong {
+  color: #17211c;
+}
+
+.period-card-total {
+  display: grid;
+  gap: 2px;
+}
+
+.period-card-total strong {
+  color: #173d24;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.period-ranking {
+  display: grid;
+  gap: 10px;
+}
+
+.period-ranking-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding-bottom: 8px;
+  overflow: hidden;
+}
+
+.period-ranking-row strong {
+  display: block;
+  overflow: hidden;
+  color: #203128;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.period-ranking-row b {
+  color: #173d24;
+}
+
+.period-ranking-row i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: #5e9a69;
+}
+
+.executive-table table {
+  min-width: 980px;
+}
+
 .mobile-only {
   display: none;
 }
@@ -1613,7 +1763,8 @@ td small.relation-warning {
   .inventory-kpis,
   .unit-grid,
   .inventory-grid,
-  .reports-grid {
+  .reports-grid,
+  .period-report-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1675,6 +1826,7 @@ td small.relation-warning {
   .unit-grid,
   .inventory-grid,
   .reports-grid,
+  .period-report-grid,
   .form-grid,
   .unit-filters,
   .attendance-pending-row,
@@ -1693,6 +1845,16 @@ td small.relation-warning {
 
   .topbar h1 {
     font-size: 24px;
+  }
+
+  .executive-report-hero,
+  .report-section-heading {
+    display: grid;
+    text-align: left;
+  }
+
+  .executive-report-meta {
+    text-align: left;
   }
 
   .map-shell,
