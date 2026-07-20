@@ -444,7 +444,9 @@ main {
 }
 
 .catalog-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
@@ -475,6 +477,77 @@ main {
 
 .panel-heading span {
   color: #66746c;
+}
+
+.heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-actions button {
+  min-height: 72px;
+  border: 1px solid #dfe7e1;
+  border-radius: 8px;
+  background: #f7faf7;
+  color: #25352d;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(23, 33, 28, 0.42);
+}
+
+.form-modal {
+  width: min(620px, 100%);
+  max-height: min(86vh, 860px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid #dfe7e1;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(23, 33, 28, 0.26);
+}
+
+.form-modal.wide {
+  width: min(900px, 100%);
+}
+
+.modal-heading {
+  position: sticky;
+  top: -18px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -18px -18px 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5ebe6;
+  background: #ffffff;
+}
+
+.modal-heading h2 {
+  margin: 0;
+  font-size: 18px;
 }
 
 .order-list,
@@ -1421,9 +1494,33 @@ td small.relation-warning {
   }
 
   .topbar-actions,
-  .search {
+  .search,
+  .heading-actions {
     width: 100%;
     min-width: 0;
+  }
+
+  .heading-actions {
+    justify-content: flex-start;
+  }
+
+  .heading-actions button {
+    flex: 1 1 180px;
+  }
+
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-backdrop {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .form-modal,
+  .form-modal.wide {
+    width: 100%;
+    max-height: calc(100vh - 20px);
   }
 
   .source-pill {

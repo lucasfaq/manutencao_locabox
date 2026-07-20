@@ -26,7 +26,7 @@ import {
   Wrench
 } from "lucide-react";
 import L, { LatLngBoundsExpression } from "leaflet";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import {
   AdminUser,
@@ -121,6 +121,23 @@ import {
 } from "./supabaseClient";
 
 type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "pendencias" | "ordens" | "unidades" | "mapa" | "historico_unidade" | "atendimentos" | "estoque" | "relatorios";
+type ActiveForm =
+  | "cliente"
+  | "empresa"
+  | "contrato"
+  | "projeto"
+  | "colaborador"
+  | "terceirizado"
+  | "usuario"
+  | "pendencia"
+  | "ordem"
+  | "unidade"
+  | "atendimento"
+  | "material"
+  | "movimentacao"
+  | "estoque-configuracao"
+  | "own-password"
+  | null;
 type ResponsavelOption = { value: string; label: string; detail: string };
 
 const initialData: Bootstrap = {
@@ -256,6 +273,7 @@ export function App() {
   const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null);
   const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null);
   const [atendimentoMovimentacoes, setAtendimentoMovimentacoes] = useState<Record<number, AtendimentoMovimentacao[]>>({});
+  const [activeForm, setActiveForm] = useState<ActiveForm>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const responsavelOptions = useMemo<ResponsavelOption[]>(
@@ -280,6 +298,22 @@ export function App() {
     [visibleNavItems]
   );
   const pageTitle = page === "historico_unidade" ? "Historico da Unidade" : navItems.find((item) => item.page === page)?.label;
+
+  function closeActiveForm() {
+    setActiveForm(null);
+    setSelectedCliente(null);
+    setSelectedEmpresa(null);
+    setSelectedContrato(null);
+    setSelectedProjeto(null);
+    setSelectedColaborador(null);
+    setSelectedTerceirizado(null);
+    setSelectedUsuario(null);
+    setSelectedPendenciaPadrao(null);
+    setSelectedOrdem(null);
+    setSelectedUnidadeInstalada(null);
+    setSelectedAtendimento(null);
+    setSelectedMaterial(null);
+  }
 
   async function load() {
     setLoading(true);
@@ -632,6 +666,7 @@ export function App() {
         await createSupabaseCliente(payload);
       }
       setSelectedCliente(null);
+      setActiveForm(null);
       formElement.reset();
       await loadClientes();
     } catch (error) {
@@ -669,6 +704,7 @@ export function App() {
         await createSupabaseEmpresa(payload);
       }
       setSelectedEmpresa(null);
+      setActiveForm(null);
       formElement.reset();
       await loadEmpresas();
     } catch (error) {
@@ -702,6 +738,7 @@ export function App() {
       if (selectedContrato) await updateSupabaseContrato(selectedContrato.idContrato, payload);
       else await createSupabaseContrato(payload);
       setSelectedContrato(null);
+      setActiveForm(null);
       formElement.reset();
       await loadContratos();
     } catch (error) {
@@ -731,6 +768,7 @@ export function App() {
       if (selectedProjeto) await updateSupabaseProjeto(selectedProjeto.idProjeto, payload);
       else await createSupabaseProjeto(payload);
       setSelectedProjeto(null);
+      setActiveForm(null);
       formElement.reset();
       await loadProjetos();
     } catch (error) {
@@ -775,6 +813,7 @@ export function App() {
       if (selectedUnidadeInstalada) await updateSupabaseUnidadeInstalada(selectedUnidadeInstalada.idUnidade, payload);
       else await createSupabaseUnidadeInstalada(payload);
       setSelectedUnidadeInstalada(null);
+      setActiveForm(null);
       formElement.reset();
       await loadUnidadesInstaladas();
     } catch (error) {
@@ -824,6 +863,7 @@ export function App() {
       if (selectedColaborador) await updateSupabaseColaborador(selectedColaborador.idColaborador, payload);
       else await createSupabaseColaborador(payload);
       setSelectedColaborador(null);
+      setActiveForm(null);
       formElement.reset();
       await loadPessoas();
     } catch (error) {
@@ -840,6 +880,7 @@ export function App() {
       if (selectedTerceirizado) await updateSupabaseTerceirizado(selectedTerceirizado.idTerceira, payload);
       else await createSupabaseTerceirizado(payload);
       setSelectedTerceirizado(null);
+      setActiveForm(null);
       formElement.reset();
       await loadPessoas();
     } catch (error) {
@@ -869,6 +910,7 @@ export function App() {
       if (selectedUsuario) await updateAdminUser(selectedUsuario, payload);
       else await createAdminUser(payload);
       setSelectedUsuario(null);
+      setActiveForm(null);
       formElement.reset();
       await loadUsuarios();
     } catch (error) {
@@ -885,6 +927,7 @@ export function App() {
       if (selectedPendenciaPadrao) await updateSupabasePendenciaPadrao(selectedPendenciaPadrao.idPendencia, payload);
       else await createSupabasePendenciaPadrao(payload);
       setSelectedPendenciaPadrao(null);
+      setActiveForm(null);
       formElement.reset();
       await loadPendencias();
     } catch (error) {
@@ -914,6 +957,7 @@ export function App() {
     setErrorMessage("");
     try {
       await updateOwnPassword(password);
+      setActiveForm(null);
       formElement.reset();
       window.alert("Sua senha foi alterada.");
     } catch (error) {
@@ -930,6 +974,7 @@ export function App() {
       if (selectedMaterial) await updateSupabaseMaterial(selectedMaterial.idMaterial, payload);
       else await createSupabaseMaterial(payload);
       setSelectedMaterial(null);
+      setActiveForm(null);
       formElement.reset();
       await loadMateriais();
     } catch (error) {
@@ -943,6 +988,7 @@ export function App() {
     setErrorMessage("");
     try {
       await updateEstoqueConfiguracao(payload);
+      setActiveForm(null);
       await loadMateriais();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar parametros de estoque.");
@@ -956,6 +1002,7 @@ export function App() {
     setErrorMessage("");
     try {
       await createEstoqueMovimentacao(payload);
+      setActiveForm(null);
       formElement.reset();
       await loadMateriais();
     } catch (error) {
@@ -993,6 +1040,7 @@ export function App() {
         if (editingOrdem) await updateSupabaseOrdem(editingOrdem.id, payload);
         else await createSupabaseOrdem(payload);
         setSelectedOrdem(null);
+        setActiveForm(null);
         formElement.reset();
         await load();
         setPage("ordens");
@@ -1029,6 +1077,7 @@ export function App() {
           )
         }));
         setSelectedOrdem(null);
+        setActiveForm(null);
         formElement.reset();
         setPage("ordens");
         return;
@@ -1056,12 +1105,14 @@ export function App() {
           .map((pendencia) => ({ id: 0, descricao: pendencia!.descricao, status: "Aberta" }))
       };
       setData((current) => withMetrics({ ...current, ordens: [ordem, ...current.ordens] }));
+      setActiveForm(null);
       formElement.reset();
       setPage("ordens");
       return;
     }
     formElement.reset();
     await load();
+    setActiveForm(null);
     setPage("ordens");
   }
 
@@ -1157,6 +1208,7 @@ export function App() {
         if (selectedAtendimento) await updateSupabaseAtendimento(selectedAtendimento.id, payload);
         else await createSupabaseAtendimento(payload);
         setSelectedAtendimento(null);
+        setActiveForm(null);
         formElement.reset();
         await load();
         setPage("atendimentos");
@@ -1191,6 +1243,7 @@ export function App() {
           )
         }));
         setSelectedAtendimento(null);
+        setActiveForm(null);
         formElement.reset();
         setPage("atendimentos");
         return;
@@ -1225,12 +1278,14 @@ export function App() {
           };
         })
       }));
+      setActiveForm(null);
       formElement.reset();
       setPage("atendimentos");
       return;
     }
     formElement.reset();
     await load();
+    setActiveForm(null);
     setPage("atendimentos");
   }
 
@@ -1393,7 +1448,10 @@ export function App() {
               <section className="panel">
                 <div className="panel-heading">
                   <h2>OS prioritarias</h2>
-                  <button onClick={() => setPage("ordens")}>Ver OS</button>
+                  <div className="heading-actions">
+                    <button onClick={() => setPage("ordens")}>Ver OS</button>
+                    <button onClick={() => { setSelectedOrdem(null); setActiveForm("ordem"); }}>Nova OS</button>
+                  </div>
                 </div>
                 <div className="order-list">
                   {filteredOrdens.slice(0, 5).map((ordem) => {
@@ -1416,21 +1474,26 @@ export function App() {
               </section>
 
               <section className="panel">
-                <div className="panel-heading">
-                  <h2>Nova OS</h2>
+                <div className="panel-heading"><h2>Consultas rapidas</h2><span>Use os menus para filtrar e abrir cadastros.</span></div>
+                <div className="quick-actions">
+                  <button type="button" onClick={() => setPage("atendimentos")}><Wrench size={16} />Atendimentos</button>
+                  <button type="button" onClick={() => setPage("estoque")}><Boxes size={16} />Estoque</button>
+                  <button type="button" onClick={() => setPage("mapa")}><MapPinned size={16} />Mapa</button>
                 </div>
-                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitOrdem} />
               </section>
             </div>
           </section>
         )}
 
         {page === "clientes" && isGestor && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
               <div className="panel-heading">
                 <h2>Clientes</h2>
-                <span>{filteredClientes.length} registros</span>
+                <div className="heading-actions">
+                  <span>{filteredClientes.length} registros</span>
+                  <button onClick={() => { setSelectedCliente(null); setActiveForm("cliente"); }}>Novo cliente</button>
+                </div>
               </div>
               <div className="table-wrap">
                 <table>
@@ -1456,7 +1519,7 @@ export function App() {
                         <td><StatusPill value={cliente.ativo ? "Ativo" : "Inativo"} /></td>
                         <td>
                           <div className="row-actions">
-                            <button className="icon-button" title="Editar cliente" onClick={() => setSelectedCliente(cliente)}>
+                            <button className="icon-button" title="Editar cliente" onClick={() => { setSelectedCliente(cliente); setActiveForm("cliente"); }}>
                               <Edit3 size={16} />
                             </button>
                             <button className="icon-button" title={cliente.ativo ? "Inativar cliente" : "Reativar cliente"} onClick={() => toggleClienteAtivo(cliente)}>
@@ -1477,22 +1540,18 @@ export function App() {
                 </table>
               </div>
             </section>
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{selectedCliente ? "Editar cliente" : "Novo cliente"}</h2>
-                {selectedCliente && <button onClick={() => setSelectedCliente(null)}>Novo</button>}
-              </div>
-              <ClienteForm cliente={selectedCliente} onSubmit={submitCliente} />
-            </section>
           </section>
         )}
 
         {page === "empresas" && isGestor && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
               <div className="panel-heading">
                 <h2>Empresas</h2>
-                <span>{filteredEmpresas.length} registros</span>
+                <div className="heading-actions">
+                  <span>{filteredEmpresas.length} registros</span>
+                  <button onClick={() => { setSelectedEmpresa(null); setActiveForm("empresa"); }}>Nova empresa</button>
+                </div>
               </div>
               <div className="table-wrap">
                 <table>
@@ -1515,7 +1574,7 @@ export function App() {
                         <td><StatusPill value={empresa.ativo ? "Ativo" : "Inativo"} /></td>
                         <td>
                           <div className="row-actions">
-                            <button className="icon-button" title="Editar empresa" onClick={() => setSelectedEmpresa(empresa)}>
+                            <button className="icon-button" title="Editar empresa" onClick={() => { setSelectedEmpresa(empresa); setActiveForm("empresa"); }}>
                               <Edit3 size={16} />
                             </button>
                             <button className="icon-button" title={empresa.ativo ? "Inativar empresa" : "Reativar empresa"} onClick={() => toggleEmpresaAtivo(empresa)}>
@@ -1536,22 +1595,18 @@ export function App() {
                 </table>
               </div>
             </section>
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{selectedEmpresa ? "Editar empresa" : "Nova empresa"}</h2>
-                {selectedEmpresa && <button onClick={() => setSelectedEmpresa(null)}>Nova</button>}
-              </div>
-              <EmpresaForm empresa={selectedEmpresa} onSubmit={submitEmpresa} />
-            </section>
           </section>
         )}
 
         {page === "contratos" && isGestor && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
               <div className="panel-heading">
                 <h2>Contratos</h2>
-                <span>{filteredContratos.length} registros</span>
+                <div className="heading-actions">
+                  <span>{filteredContratos.length} registros</span>
+                  <button onClick={() => { setSelectedContrato(null); setActiveForm("contrato"); }}>Novo contrato</button>
+                </div>
               </div>
               <div className="table-wrap">
                 <table>
@@ -1567,7 +1622,7 @@ export function App() {
                         <td><StatusPill value={contrato.ativo ? contrato.statusCodigo : "Inativo"} /></td>
                         <td>
                           <div className="row-actions">
-                            <button className="icon-button" title="Editar contrato" onClick={() => setSelectedContrato(contrato)}><Edit3 size={16} /></button>
+                            <button className="icon-button" title="Editar contrato" onClick={() => { setSelectedContrato(contrato); setActiveForm("contrato"); }}><Edit3 size={16} /></button>
                             <button className="icon-button" title={contrato.ativo ? "Inativar contrato" : "Reativar contrato"} onClick={() => toggleContratoAtivo(contrato)}><Power size={16} /></button>
                           </div>
                         </td>
@@ -1578,20 +1633,13 @@ export function App() {
                 </table>
               </div>
             </section>
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{selectedContrato ? "Editar contrato" : "Novo contrato"}</h2>
-                {selectedContrato && <button onClick={() => setSelectedContrato(null)}>Novo</button>}
-              </div>
-              <ContratoForm contrato={selectedContrato} clientes={clientes} empresas={empresas} status={statusContratos} onSubmit={submitContrato} />
-            </section>
           </section>
         )}
 
         {page === "projetos" && isGestor && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
-              <div className="panel-heading"><h2>Projetos</h2><span>{filteredProjetos.length} registros</span></div>
+              <div className="panel-heading"><h2>Projetos</h2><div className="heading-actions"><span>{filteredProjetos.length} registros</span><button onClick={() => { setSelectedProjeto(null); setActiveForm("projeto"); }}>Novo projeto</button></div></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Projeto</th><th>Contrato</th><th>Localidade</th><th>Status</th><th>Acoes</th></tr></thead>
@@ -1603,7 +1651,7 @@ export function App() {
                         <td>{[projeto.municipio, projeto.uf].filter(Boolean).join(" / ") || "Nao informada"}</td>
                         <td><StatusPill value={projeto.ativo ? "Ativo" : "Inativo"} /></td>
                         <td><div className="row-actions">
-                          <button className="icon-button" title="Editar projeto" onClick={() => setSelectedProjeto(projeto)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title="Editar projeto" onClick={() => { setSelectedProjeto(projeto); setActiveForm("projeto"); }}><Edit3 size={16} /></button>
                           <button className="icon-button" title={projeto.ativo ? "Inativar projeto" : "Reativar projeto"} onClick={() => toggleProjetoAtivo(projeto)}><Power size={16} /></button>
                         </div></td>
                       </tr>
@@ -1613,17 +1661,13 @@ export function App() {
                 </table>
               </div>
             </section>
-            <section className="panel">
-              <div className="panel-heading"><h2>{selectedProjeto ? "Editar projeto" : "Novo projeto"}</h2>{selectedProjeto && <button onClick={() => setSelectedProjeto(null)}>Novo</button>}</div>
-              <ProjetoForm projeto={selectedProjeto} contratos={contratos} onSubmit={submitProjeto} />
-            </section>
           </section>
         )}
 
         {page === "pessoas" && isGestor && (
           <section className="two-columns">
             <section className="panel">
-              <div className="panel-heading"><h2>Colaboradores</h2><span>{filteredColaboradores.length} registros</span></div>
+              <div className="panel-heading"><h2>Colaboradores</h2><div className="heading-actions"><span>{filteredColaboradores.length} registros</span><button onClick={() => { setSelectedColaborador(null); setActiveForm("colaborador"); }}>Novo colaborador</button></div></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Nome</th><th>Status</th><th>Acoes</th></tr></thead>
@@ -1633,7 +1677,7 @@ export function App() {
                         <td><strong>{item.nome}</strong><small>{item.cargo || "Cargo nao informado"} · {item.telefone || "Sem telefone"}</small></td>
                         <td><StatusPill value={item.ativo ? "Ativo" : "Inativo"} /></td>
                         <td><div className="row-actions">
-                          <button className="icon-button" title="Editar colaborador" onClick={() => setSelectedColaborador(item)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title="Editar colaborador" onClick={() => { setSelectedColaborador(item); setActiveForm("colaborador"); }}><Edit3 size={16} /></button>
                           <button className="icon-button" title={item.ativo ? "Inativar colaborador" : "Reativar colaborador"} onClick={() => togglePessoaAtiva("colaborador", item.idColaborador, item.nome, item.ativo)}><Power size={16} /></button>
                         </div></td>
                       </tr>
@@ -1642,11 +1686,9 @@ export function App() {
                   </tbody>
                 </table>
               </div>
-              <div className="panel-heading"><h2>{selectedColaborador ? "Editar colaborador" : "Novo colaborador"}</h2>{selectedColaborador && <button onClick={() => setSelectedColaborador(null)}>Novo</button>}</div>
-              <ColaboradorForm colaborador={selectedColaborador} onSubmit={submitColaborador} />
             </section>
             <section className="panel">
-              <div className="panel-heading"><h2>Terceirizados</h2><span>{filteredTerceirizados.length} registros</span></div>
+              <div className="panel-heading"><h2>Terceirizados</h2><div className="heading-actions"><span>{filteredTerceirizados.length} registros</span><button onClick={() => { setSelectedTerceirizado(null); setActiveForm("terceirizado"); }}>Novo terceirizado</button></div></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Nome</th><th>Status</th><th>Acoes</th></tr></thead>
@@ -1656,7 +1698,7 @@ export function App() {
                         <td><strong>{item.nome}</strong><small>{item.empresa || "Empresa nao informada"} · {item.documento || "Sem documento"}</small></td>
                         <td><StatusPill value={item.ativo ? "Ativo" : "Inativo"} /></td>
                         <td><div className="row-actions">
-                          <button className="icon-button" title="Editar terceirizado" onClick={() => setSelectedTerceirizado(item)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title="Editar terceirizado" onClick={() => { setSelectedTerceirizado(item); setActiveForm("terceirizado"); }}><Edit3 size={16} /></button>
                           <button className="icon-button" title={item.ativo ? "Inativar terceirizado" : "Reativar terceirizado"} onClick={() => togglePessoaAtiva("terceirizado", item.idTerceira, item.nome, item.ativo)}><Power size={16} /></button>
                         </div></td>
                       </tr>
@@ -1665,16 +1707,14 @@ export function App() {
                   </tbody>
                 </table>
               </div>
-              <div className="panel-heading"><h2>{selectedTerceirizado ? "Editar terceirizado" : "Novo terceirizado"}</h2>{selectedTerceirizado && <button onClick={() => setSelectedTerceirizado(null)}>Novo</button>}</div>
-              <TerceirizadoForm terceirizado={selectedTerceirizado} onSubmit={submitTerceirizado} />
             </section>
           </section>
         )}
 
         {page === "usuarios" && isGestor && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
-              <div className="panel-heading"><h2>Usuarios e acessos</h2><span>{filteredUsuarios.length} contas</span></div>
+              <div className="panel-heading"><h2>Usuarios e acessos</h2><div className="heading-actions"><span>{filteredUsuarios.length} contas</span><button onClick={() => { setSelectedUsuario(null); setActiveForm("usuario"); }}>Novo usuario</button><button onClick={() => setActiveForm("own-password")}>Alterar minha senha</button></div></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Usuario</th><th>Perfil</th><th>Ultimo acesso</th><th>Status</th><th>Acoes</th></tr></thead>
@@ -1685,7 +1725,7 @@ export function App() {
                         <td>{usuario.profile?.perfil || "Sem perfil"}</td>
                         <td>{usuario.lastSignInAt ? new Date(usuario.lastSignInAt).toLocaleString("pt-BR") : "Nunca acessou"}</td>
                         <td><StatusPill value={usuario.profile?.ativo ? "Ativo" : "Inativo"} /></td>
-                        <td><button className="icon-button" title="Editar usuario" onClick={() => setSelectedUsuario(usuario)}><Edit3 size={16} /></button></td>
+                        <td><button className="icon-button" title="Editar usuario" onClick={() => { setSelectedUsuario(usuario); setActiveForm("usuario"); }}><Edit3 size={16} /></button></td>
                       </tr>
                     ))}
                     {!filteredUsuarios.length && <tr><td colSpan={5}><span className="empty-state">Nenhum usuario encontrado.</span></td></tr>}
@@ -1693,26 +1733,13 @@ export function App() {
                 </table>
               </div>
             </section>
-            <div>
-              <section className="panel">
-                <div className="panel-heading"><h2>{selectedUsuario ? "Editar usuario" : "Novo usuario"}</h2>{selectedUsuario && <button onClick={() => setSelectedUsuario(null)}>Novo</button>}</div>
-                <UsuarioForm usuario={selectedUsuario} colaboradores={colaboradores} onSubmit={submitUsuario} />
-              </section>
-              <section className="panel account-password-panel">
-                <div className="panel-heading"><h2>Minha senha</h2></div>
-                <form className="form-grid" onSubmit={submitOwnPassword}>
-                  <label className="wide">Nova senha<input name="ownPassword" type="password" required minLength={8} autoComplete="new-password" /></label>
-                  <button className="primary-button"><ShieldCheck size={16} />Alterar minha senha</button>
-                </form>
-              </section>
-            </div>
           </section>
         )}
 
         {page === "pendencias" && isGestor && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
-              <div className="panel-heading"><h2>Pendencias padrao</h2><span>{filteredPendenciasPadrao.length} registros</span></div>
+              <div className="panel-heading"><h2>Pendencias padrao</h2><div className="heading-actions"><span>{filteredPendenciasPadrao.length} registros</span><button onClick={() => { setSelectedPendenciaPadrao(null); setActiveForm("pendencia"); }}>Nova pendencia</button></div></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Pendencia</th><th>Codigo</th><th>Status</th><th>Acoes</th></tr></thead>
@@ -1723,7 +1750,7 @@ export function App() {
                         <td>{pendencia.codigo || "Sem codigo"}</td>
                         <td><StatusPill value={pendencia.ativo ? "Ativo" : "Inativo"} /></td>
                         <td><div className="row-actions">
-                          <button className="icon-button" title="Editar pendencia" onClick={() => setSelectedPendenciaPadrao(pendencia)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title="Editar pendencia" onClick={() => { setSelectedPendenciaPadrao(pendencia); setActiveForm("pendencia"); }}><Edit3 size={16} /></button>
                           <button className="icon-button" title={pendencia.ativo ? "Inativar pendencia" : "Reativar pendencia"} onClick={() => togglePendenciaPadraoAtivo(pendencia)}><Power size={16} /></button>
                         </div></td>
                       </tr>
@@ -1733,19 +1760,18 @@ export function App() {
                 </table>
               </div>
             </section>
-            <section className="panel">
-              <div className="panel-heading"><h2>{selectedPendenciaPadrao ? "Editar pendencia" : "Nova pendencia"}</h2>{selectedPendenciaPadrao && <button onClick={() => setSelectedPendenciaPadrao(null)}>Nova</button>}</div>
-              <PendenciaPadraoForm pendencia={selectedPendenciaPadrao} onSubmit={submitPendenciaPadrao} />
-            </section>
           </section>
         )}
 
         {page === "ordens" && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
               <div className="panel-heading">
                 <h2>Ordens de servico</h2>
-                <span>{filteredOrdens.length} registros</span>
+                <div className="heading-actions">
+                  <span>{filteredOrdens.length} registros</span>
+                  <button onClick={() => { setSelectedOrdem(null); setActiveForm("ordem"); }}>Nova OS</button>
+                </div>
               </div>
               <div className="table-wrap">
                 <table>
@@ -1783,7 +1809,7 @@ export function App() {
                           </td>
                           <td>
                             <div className="row-actions">
-                              <button className="icon-button" title="Editar OS" onClick={() => setSelectedOrdem(ordem)}><Edit3 size={16} /></button>
+                              <button className="icon-button" title="Editar OS" onClick={() => { setSelectedOrdem(ordem); setActiveForm("ordem"); }}><Edit3 size={16} /></button>
                               <button className="icon-button" title={bloqueios ? `Exclusao bloqueada: ${bloqueios}` : "Excluir OS"} onClick={() => deleteOrdem(ordem)}><Trash2 size={16} /></button>
                             </div>
                           </td>
@@ -1794,20 +1820,19 @@ export function App() {
                 </table>
               </div>
             </section>
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{selectedOrdem ? "Editar OS" : "Nova OS"}</h2>
-                {selectedOrdem && <button onClick={() => setSelectedOrdem(null)}>Nova</button>}
-              </div>
-              <OrdemForm ordem={selectedOrdem} unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitOrdem} />
-            </section>
           </section>
         )}
 
         {page === "unidades" && (
-          <section className={isGestor ? "two-columns catalog-layout" : "panel full"}>
+          <section className="catalog-layout">
             <section className="panel full">
-              <div className="panel-heading"><h2>Unidades instaladas</h2><span>{filteredUnidadesInstaladas.length} registros</span></div>
+              <div className="panel-heading">
+                <h2>Unidades instaladas</h2>
+                <div className="heading-actions">
+                  <span>{filteredUnidadesInstaladas.length} registros</span>
+                  {isGestor && <button onClick={() => { setSelectedUnidadeInstalada(null); setActiveForm("unidade"); }}>Nova unidade</button>}
+                </div>
+              </div>
               <div className="unit-filters">
                 <label>Estado
                   <select value={unitEstadoFilter} onChange={(event) => {
@@ -1863,7 +1888,7 @@ export function App() {
                         <td>{unidade.googleMapsUrl ? <a className="map-link" href={unidade.googleMapsUrl} target="_blank" rel="noreferrer">Abrir mapa</a> : "—"}</td>
                         <td><StatusPill value={unidade.ativo ? unidade.statusCodigo : "Inativo"} /></td>
                         {isGestor && <td><div className="row-actions">
-                          <button className="icon-button" title="Editar unidade" onClick={() => setSelectedUnidadeInstalada(unidade)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title="Editar unidade" onClick={() => { setSelectedUnidadeInstalada(unidade); setActiveForm("unidade"); }}><Edit3 size={16} /></button>
                           <button className="icon-button" title={unidade.ativo ? "Inativar unidade" : "Reativar unidade"} onClick={() => toggleUnidadeInstaladaAtiva(unidade)}><Power size={16} /></button>
                         </div></td>}
                       </tr>
@@ -1873,10 +1898,6 @@ export function App() {
                 </table>
               </div>
             </section>
-            {isGestor && <section className="panel">
-              <div className="panel-heading"><h2>{selectedUnidadeInstalada ? "Editar unidade" : "Nova unidade"}</h2>{selectedUnidadeInstalada && <button onClick={() => setSelectedUnidadeInstalada(null)}>Nova</button>}</div>
-              <UnidadeInstaladaForm unidade={selectedUnidadeInstalada} projetos={projetos} status={statusUnidades} onSubmit={submitUnidadeInstalada} />
-            </section>}
           </section>
         )}
 
@@ -1950,11 +1971,14 @@ export function App() {
         )}
 
         {page === "atendimentos" && (
-          <section className="two-columns catalog-layout">
+          <section className="catalog-layout">
             <section className="panel full">
               <div className="panel-heading">
                 <h2>Atendimentos</h2>
-                <span>{data.atendimentos.length} registros</span>
+                <div className="heading-actions">
+                  <span>{data.atendimentos.length} registros</span>
+                  <button onClick={() => { setSelectedAtendimento(null); setActiveForm("atendimento"); }}>Registrar atendimento</button>
+                </div>
               </div>
               <div className="table-wrap">
                 <table>
@@ -2001,7 +2025,7 @@ export function App() {
                           </td>
                           <td>
                             <div className="row-actions">
-                              <button className="icon-button" title="Editar atendimento" onClick={() => setSelectedAtendimento(atendimento)}><Edit3 size={16} /></button>
+                              <button className="icon-button" title="Editar atendimento" onClick={() => { setSelectedAtendimento(atendimento); setActiveForm("atendimento"); }}><Edit3 size={16} /></button>
                               <button className="icon-button" disabled={atendimento.materiais.length > 0} title={atendimento.materiais.length ? `Estorne os materiais antes de excluir: ${atendimento.materiais.join(" | ")}` : "Excluir atendimento"} onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
                             </div>
                           </td>
@@ -2012,13 +2036,6 @@ export function App() {
                   </tbody>
                 </table>
               </div>
-            </section>
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{selectedAtendimento ? "Editar atendimento" : "Registrar atendimento"}</h2>
-                {selectedAtendimento && <button onClick={() => setSelectedAtendimento(null)}>Novo</button>}
-              </div>
-              <AtendimentoForm atendimento={selectedAtendimento} ordens={data.ordens.filter((ordem) => selectedAtendimento?.ordemId === ordem.id || ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitAtendimento} />
             </section>
           </section>
         )}
@@ -2033,7 +2050,15 @@ export function App() {
             </section>
 
             <section className="panel full">
-              <div className="panel-heading"><h2>Planejamento de ressuprimento</h2><span>{filteredEstoquePlanejamento.length} itens</span></div>
+              <div className="panel-heading">
+                <h2>Planejamento de ressuprimento</h2>
+                <div className="heading-actions">
+                  <span>{filteredEstoquePlanejamento.length} itens</span>
+                  {isGestor && <button onClick={() => { setSelectedMaterial(null); setActiveForm("material"); }}>Novo material</button>}
+                  {isGestor && <button onClick={() => setActiveForm("movimentacao")}>Registrar movimentacao</button>}
+                  {isGestor && <button onClick={() => setActiveForm("estoque-configuracao")}>Parametros</button>}
+                </div>
+              </div>
               <div className="table-wrap">
                 <table className="planning-table">
                   <thead><tr><th>Material</th><th>Saldo</th><th>Consumo medio</th><th>Seguranca</th><th>Ponto de compra</th><th>Cobertura</th><th>Sugestao</th><th>Situacao</th>{isGestor && <th>Acoes</th>}</tr></thead>
@@ -2050,7 +2075,7 @@ export function App() {
                         <td><strong>{item.sugestaoCompra.toLocaleString("pt-BR")} {item.unidadeMedida}</strong><small>alvo {item.estoqueAlvo.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</small></td>
                         <td><span className={`inventory-status ${item.situacao}`}>{inventoryStatusLabel(item.situacao)}</span></td>
                         {isGestor && <td><div className="row-actions">
-                          <button className="icon-button" title="Editar parametros do material" onClick={() => setSelectedMaterial(material || null)}><Edit3 size={16} /></button>
+                          <button className="icon-button" title="Editar parametros do material" onClick={() => { setSelectedMaterial(material || null); setActiveForm("material"); }}><Edit3 size={16} /></button>
                           {material && <button className="icon-button" title={material.ativo ? "Inativar material" : "Reativar material"} onClick={() => toggleMaterialAtivo(material)}><Power size={16} /></button>}
                         </div></td>}
                       </tr>;
@@ -2062,28 +2087,15 @@ export function App() {
             </section>
 
             {isGestor && <section className="panel full">
-              <div className="panel-heading"><h2>Registrar movimentacao</h2><span>Entrada ou saida auditavel</span></div>
-              <EstoqueMovimentacaoForm materiais={materiais.filter((item) => item.ativo)} onSubmit={submitEstoqueMovimentacao} />
-            </section>}
-
-            {isGestor && <section className="two-columns inventory-settings-layout">
-              <section className="panel">
-                <div className="panel-heading"><h2>{selectedMaterial ? "Editar material" : "Novo material"}</h2>{selectedMaterial && <button onClick={() => setSelectedMaterial(null)}>Novo</button>}</div>
-                <MaterialForm material={selectedMaterial} configuracao={estoqueConfiguracao} onSubmit={submitMaterial} />
-                <div className="inventory-catalog">
-                  <h3>Materiais cadastrados</h3>
-                  {filteredMateriais.map((item) => (
-                    <button type="button" key={item.idMaterial} onClick={() => setSelectedMaterial(item)}>
-                      <span>{item.descricao}</span>
-                      <small>{item.ativo ? "Ativo" : "Inativo"} · {item.codigo || "sem codigo"}</small>
-                    </button>
-                  ))}
-                </div>
-              </section>
-              <section className="panel">
-                <div className="panel-heading"><h2>Parametros gerais</h2><span>Padroes herdados</span></div>
-                {estoqueConfiguracao && <EstoqueConfiguracaoForm configuracao={estoqueConfiguracao} onSubmit={submitEstoqueConfiguracao} />}
-              </section>
+              <div className="panel-heading"><h2>Materiais cadastrados</h2><span>{filteredMateriais.length} registros</span></div>
+              <div className="inventory-catalog compact">
+                {filteredMateriais.map((item) => (
+                  <button type="button" key={item.idMaterial} onClick={() => { setSelectedMaterial(item); setActiveForm("material"); }}>
+                    <span>{item.descricao}</span>
+                    <small>{item.ativo ? "Ativo" : "Inativo"} - {item.codigo || "sem codigo"}</small>
+                  </button>
+                ))}
+              </div>
             </section>}
           </section>
         )}
@@ -2096,7 +2108,100 @@ export function App() {
             <ReportCard title="Estoque critico" value={`${data.metrics.estoqueBaixo} itens`} icon={PackageSearch} />
           </section>
         )}
+
+        {(activeForm === "cliente") && (
+          <FormModal title={selectedCliente ? "Editar cliente" : "Novo cliente"} onClose={closeActiveForm}>
+            <ClienteForm cliente={selectedCliente} onSubmit={submitCliente} />
+          </FormModal>
+        )}
+        {(activeForm === "empresa") && (
+          <FormModal title={selectedEmpresa ? "Editar empresa" : "Nova empresa"} onClose={closeActiveForm}>
+            <EmpresaForm empresa={selectedEmpresa} onSubmit={submitEmpresa} />
+          </FormModal>
+        )}
+        {(activeForm === "contrato") && (
+          <FormModal title={selectedContrato ? "Editar contrato" : "Novo contrato"} onClose={closeActiveForm}>
+            <ContratoForm contrato={selectedContrato} clientes={clientes} empresas={empresas} status={statusContratos} onSubmit={submitContrato} />
+          </FormModal>
+        )}
+        {(activeForm === "projeto") && (
+          <FormModal title={selectedProjeto ? "Editar projeto" : "Novo projeto"} onClose={closeActiveForm}>
+            <ProjetoForm projeto={selectedProjeto} contratos={contratos} onSubmit={submitProjeto} />
+          </FormModal>
+        )}
+        {(activeForm === "colaborador") && (
+          <FormModal title={selectedColaborador ? "Editar colaborador" : "Novo colaborador"} onClose={closeActiveForm}>
+            <ColaboradorForm colaborador={selectedColaborador} onSubmit={submitColaborador} />
+          </FormModal>
+        )}
+        {(activeForm === "terceirizado") && (
+          <FormModal title={selectedTerceirizado ? "Editar terceirizado" : "Novo terceirizado"} onClose={closeActiveForm}>
+            <TerceirizadoForm terceirizado={selectedTerceirizado} onSubmit={submitTerceirizado} />
+          </FormModal>
+        )}
+        {(activeForm === "usuario") && (
+          <FormModal title={selectedUsuario ? "Editar usuario" : "Novo usuario"} onClose={closeActiveForm}>
+            <UsuarioForm usuario={selectedUsuario} colaboradores={colaboradores} onSubmit={submitUsuario} />
+          </FormModal>
+        )}
+        {(activeForm === "own-password") && (
+          <FormModal title="Minha senha" onClose={closeActiveForm}>
+            <form className="form-grid" onSubmit={submitOwnPassword}>
+              <label className="wide">Nova senha<input name="ownPassword" type="password" required minLength={8} autoComplete="new-password" /></label>
+              <button className="primary-button"><ShieldCheck size={16} />Alterar minha senha</button>
+            </form>
+          </FormModal>
+        )}
+        {(activeForm === "pendencia") && (
+          <FormModal title={selectedPendenciaPadrao ? "Editar pendencia" : "Nova pendencia"} onClose={closeActiveForm}>
+            <PendenciaPadraoForm pendencia={selectedPendenciaPadrao} onSubmit={submitPendenciaPadrao} />
+          </FormModal>
+        )}
+        {(activeForm === "ordem") && (
+          <FormModal title={selectedOrdem ? "Editar OS" : "Nova OS"} onClose={closeActiveForm} wide>
+            <OrdemForm ordem={selectedOrdem} unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitOrdem} />
+          </FormModal>
+        )}
+        {(activeForm === "unidade") && (
+          <FormModal title={selectedUnidadeInstalada ? "Editar unidade" : "Nova unidade"} onClose={closeActiveForm} wide>
+            <UnidadeInstaladaForm unidade={selectedUnidadeInstalada} projetos={projetos} status={statusUnidades} onSubmit={submitUnidadeInstalada} />
+          </FormModal>
+        )}
+        {(activeForm === "atendimento") && (
+          <FormModal title={selectedAtendimento ? "Editar atendimento" : "Registrar atendimento"} onClose={closeActiveForm} wide>
+            <AtendimentoForm atendimento={selectedAtendimento} ordens={data.ordens.filter((ordem) => selectedAtendimento?.ordemId === ordem.id || ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitAtendimento} />
+          </FormModal>
+        )}
+        {(activeForm === "material") && (
+          <FormModal title={selectedMaterial ? "Editar material" : "Novo material"} onClose={closeActiveForm} wide>
+            <MaterialForm material={selectedMaterial} configuracao={estoqueConfiguracao} onSubmit={submitMaterial} />
+          </FormModal>
+        )}
+        {(activeForm === "movimentacao") && (
+          <FormModal title="Registrar movimentacao" onClose={closeActiveForm} wide>
+            <EstoqueMovimentacaoForm materiais={materiais.filter((item) => item.ativo)} onSubmit={submitEstoqueMovimentacao} />
+          </FormModal>
+        )}
+        {(activeForm === "estoque-configuracao" && estoqueConfiguracao) && (
+          <FormModal title="Parametros gerais de estoque" onClose={closeActiveForm} wide>
+            <EstoqueConfiguracaoForm configuracao={estoqueConfiguracao} onSubmit={submitEstoqueConfiguracao} />
+          </FormModal>
+        )}
       </main>
+    </div>
+  );
+}
+
+function FormModal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className={`form-modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <h2>{title}</h2>
+          <button className="icon-button" type="button" title="Fechar" onClick={onClose}>&times;</button>
+        </div>
+        {children}
+      </section>
     </div>
   );
 }
