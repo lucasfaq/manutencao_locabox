@@ -168,6 +168,20 @@ function getSla(ordem: Ordem) {
   return { label: `${diff}d restantes`, tone: "ok" };
 }
 
+function summarizeMaterials(materiais: string[]) {
+  if (!materiais.length) return "Sem material";
+  if (materiais.length === 1) return materiais[0];
+  return `${materiais[0]} + ${materiais.length - 1} item(ns)`;
+}
+
+function describeAttendanceBlockers(atendimentos: Atendimento[]) {
+  const blocked = atendimentos.filter((atendimento) => atendimento.materiais.length > 0);
+  if (!blocked.length) return "";
+  return blocked
+    .map((atendimento) => `#${atendimento.id}: ${atendimento.materiais.join("; ")}`)
+    .join(" | ");
+}
+
 function StatusPill({ value }: { value: string }) {
   const tone = value === "Concluida" || value === "Executado" ? "ok" : value === "Pendente" || value === "Parcial" ? "warn" : "info";
   return <span className={`pill ${tone}`}>{value}</span>;
@@ -1039,9 +1053,9 @@ export function App() {
 
   async function deleteOrdem(ordem: Ordem) {
     const atendimentosDaOrdem = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id);
-    const hasMateriais = atendimentosDaOrdem.some((atendimento) => atendimento.materiais.length > 0);
-    if (hasMateriais) {
-      setErrorMessage("Esta OS possui atendimento com material ou movimentacao de estoque. Exclua apenas OS sem baixa de material para preservar o estoque.");
+    const bloqueios = describeAttendanceBlockers(atendimentosDaOrdem);
+    if (bloqueios) {
+      setErrorMessage(`Esta OS possui atendimento com material lancado. Vinculos: ${bloqueios}. Para preservar o estoque, edite/cancele o status em vez de excluir.`);
       return;
     }
     const detail = atendimentosDaOrdem.length ? ` e ${atendimentosDaOrdem.length} atendimento(s) vinculado(s)` : "";
@@ -1061,6 +1075,10 @@ export function App() {
       console.error("Falha ao excluir OS", error);
       const message = error && typeof error === "object" && "message" in error ? String((error as { message?: unknown }).message) : "";
       const detail = error && typeof error === "object" && "details" in error ? String((error as { details?: unknown }).details) : "";
+      if (`${message} ${detail}`.includes("permission denied for table pendencias_ordem")) {
+        setErrorMessage("Falha ao excluir OS: permissao ausente em pendencias_ordem. Aplique as migrations 20260720005500_allow_order_delete_without_stock.sql e 20260720012000_app_crud_permissions.sql no Supabase remoto.");
+        return;
+      }
       setErrorMessage(message || detail ? `Falha ao excluir OS: ${message || detail}` : "Falha ao excluir OS.");
     }
   }
@@ -1204,7 +1222,7 @@ export function App() {
 
   async function deleteAtendimento(atendimento: Atendimento) {
     if (atendimento.materiais.length > 0) {
-      setErrorMessage("Este atendimento possui material lancado. Para preservar o estoque, edite o relato/status em vez de excluir.");
+      setErrorMessage(`Este atendimento possui material lancado: ${atendimento.materiais.join("; ")}. Para preservar o estoque, edite o relato/status em vez de excluir.`);
       return;
     }
     if (!window.confirm(`Excluir atendimento #${atendimento.id}?`)) return;
@@ -1712,7 +1730,10 @@ export function App() {
                     {filteredOrdens.map((ordem) => {
                       const unidade = findUnidade(data.unidades, ordem);
                       const sla = getSla(ordem);
-                      const totalAtendimentos = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id).length;
+                      const atendimentosDaOrdem = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id);
+                      const totalAtendimentos = atendimentosDaOrdem.length;
+                      const totalMateriais = atendimentosDaOrdem.reduce((sum, atendimento) => sum + atendimento.materiais.length, 0);
+                      const bloqueios = describeAttendanceBlockers(atendimentosDaOrdem);
                       return (
                         <tr key={ordem.id}>
                           <td><strong>{ordem.protocolo}</strong><small>{ordem.tipo}</small></td>
@@ -1721,11 +1742,14 @@ export function App() {
                           <td><StatusPill value={ordem.status} /></td>
                           <td><span className={`pill ${sla.tone}`}>{sla.label}</span><small>{ordem.prazoSla}</small></td>
                           <td>{ordem.responsavel}</td>
-                          <td>{totalAtendimentos}</td>
+                          <td>
+                            <strong>{totalAtendimentos}</strong>
+                            <small className={totalMateriais ? "relation-warning" : ""}>{totalMateriais ? `${totalMateriais} material(is) vinculado(s)` : "Sem material"}</small>
+                          </td>
                           <td>
                             <div className="row-actions">
                               <button className="icon-button" title="Editar OS" onClick={() => setSelectedOrdem(ordem)}><Edit3 size={16} /></button>
-                              <button className="icon-button" title="Excluir OS" onClick={() => deleteOrdem(ordem)}><Trash2 size={16} /></button>
+                              <button className="icon-button" title={bloqueios ? `Exclusao bloqueada: ${bloqueios}` : "Excluir OS"} onClick={() => deleteOrdem(ordem)}><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
@@ -1912,17 +1936,21 @@ export function App() {
                   <tbody>
                     {data.atendimentos.map((atendimento) => {
                       const ordem = data.ordens.find((item) => item.id === atendimento.ordemId);
+                      const materiaisResumo = summarizeMaterials(atendimento.materiais);
                       return (
                         <tr key={atendimento.id}>
                           <td><strong>#{atendimento.id}</strong><small>{atendimento.data}</small></td>
                           <td>{ordem?.protocolo || "OS removida"}<small>{ordem?.descricao || "Sem descricao"}</small></td>
                           <td>{atendimento.equipe}</td>
                           <td><StatusPill value={atendimento.status} /></td>
-                          <td>{atendimento.materiais.length}<small>{atendimento.materiais.slice(0, 1).join("") || "Sem material"}</small></td>
+                          <td title={atendimento.materiais.join(" | ") || "Sem material"}>
+                            <strong>{atendimento.materiais.length}</strong>
+                            <small className={atendimento.materiais.length ? "relation-warning" : ""}>{materiaisResumo}</small>
+                          </td>
                           <td>
                             <div className="row-actions">
                               <button className="icon-button" title="Editar atendimento" onClick={() => setSelectedAtendimento(atendimento)}><Edit3 size={16} /></button>
-                              <button className="icon-button" title="Excluir atendimento" onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
+                              <button className="icon-button" title={atendimento.materiais.length ? `Exclusao bloqueada: ${atendimento.materiais.join(" | ")}` : "Excluir atendimento"} onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>

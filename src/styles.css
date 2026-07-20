@@ -1046,6 +1046,11 @@ td small {
   margin-top: 4px;
 }
 
+td small.relation-warning {
+  color: #8c6500;
+  font-weight: 800;
+}
+
 .row-actions {
   display: flex;
   gap: 8px;

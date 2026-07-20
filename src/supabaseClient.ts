@@ -1318,6 +1318,12 @@ export async function updateSupabaseOrdem(id: number, payload: Record<string, Fo
 
 export async function deleteSupabaseOrdem(ordem: Ordem): Promise<void> {
   const client = requireSupabase();
+  const { error: rpcError } = await client.rpc("excluir_ordem_mvp", { p_ordem_id: ordem.id });
+  if (!rpcError) return;
+  const rpcMessage = String(rpcError.message || "");
+  const missingRpc = rpcMessage.includes("Could not find the function") || rpcMessage.includes("function public.excluir_ordem_mvp");
+  if (!missingRpc) throw rpcError;
+
   const { data: atendimentos, error: loadError } = await client
     .from("atendimentos")
     .select("id")
