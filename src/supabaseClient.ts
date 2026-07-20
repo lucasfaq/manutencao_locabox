@@ -1382,6 +1382,49 @@ export async function createSupabaseAtendimento(payload: Record<string, FormData
   };
 }
 
+export async function updateSupabaseAtendimento(id: number, payload: Record<string, FormDataEntryValue>): Promise<Atendimento> {
+  const client = requireSupabase();
+  const row = {
+    ordem_id: Number(payload.ordemId),
+    data: String(payload.data || new Date().toISOString().slice(0, 10)),
+    equipe: String(payload.equipe || "Equipe interna"),
+    status: String(payload.status || "Executado"),
+    relato: String(payload.relato || "")
+  };
+  const { data, error } = await client
+    .from("atendimentos")
+    .update(row)
+    .eq("id", id)
+    .select("*, atendimento_materiais(descricao)")
+    .single();
+  if (error) throw error;
+  return {
+    id: Number(data.id),
+    ordemId: Number(data.ordem_id),
+    data: data.data,
+    equipe: data.equipe,
+    status: data.status,
+    relato: data.relato,
+    materiais: (data.atendimento_materiais || []).map((item: any) => item.descricao)
+  };
+}
+
+export async function deleteSupabaseAtendimento(atendimento: Atendimento): Promise<void> {
+  const client = requireSupabase();
+  const { count, error: countError } = await client
+    .from("atendimento_materiais")
+    .select("id", { count: "exact", head: true })
+    .eq("atendimento_id", atendimento.id);
+  if (countError) throw countError;
+  if (Number(count || 0) > 0) {
+    throw new Error("Este atendimento possui material lancado. Para preservar o estoque, edite o relato/status em vez de excluir.");
+  }
+
+  await client.from("atendimento_pendencias").delete().eq("atendimento_id", atendimento.id);
+  const { error } = await client.from("atendimentos").delete().eq("id", atendimento.id);
+  if (error) throw error;
+}
+
 function parseAtendimentoMateriais(value: unknown): AtendimentoMaterialUso[] {
   if (!value) return [];
   const parsed = JSON.parse(String(value)) as Array<Partial<AtendimentoMaterialUso>>;

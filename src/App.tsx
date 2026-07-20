@@ -94,6 +94,7 @@ import {
   signOut,
   supabase,
   resolveGoogleMapsLink,
+  deleteSupabaseAtendimento,
   deleteSupabaseOrdem,
   updateAdminUser,
   updateEstoqueConfiguracao,
@@ -102,6 +103,7 @@ import {
   updateSupabaseColaborador,
   updateSupabaseContrato,
   updateSupabaseEmpresa,
+  updateSupabaseAtendimento,
   updateSupabaseOrdem,
   updateSupabasePendenciaPadrao,
   updateSupabaseProjeto,
@@ -124,21 +126,29 @@ const initialData: Bootstrap = {
   metrics: { unidades: 0, ordensAbertas: 0, slaVencidas: 0, atendimentos: 0, atendimentosPorOs: 0, estoqueBaixo: 0 }
 };
 
-const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard }> = [
-  { page: "dashboard", label: "Painel", icon: LayoutDashboard },
-  { page: "clientes", label: "Clientes", icon: UserRound },
-  { page: "empresas", label: "Empresas", icon: Building2 },
-  { page: "contratos", label: "Contratos", icon: ClipboardList },
-  { page: "projetos", label: "Projetos", icon: MapPin },
-  { page: "pessoas", label: "Pessoas", icon: UserRound },
-  { page: "usuarios", label: "Usuarios", icon: ShieldCheck },
-  { page: "pendencias", label: "Pendencias", icon: ClipboardList },
-  { page: "ordens", label: "OS", icon: ClipboardList },
-  { page: "unidades", label: "Unidades", icon: MapPin },
-  { page: "mapa", label: "Mapa das Unidades", icon: MapPinned },
-  { page: "atendimentos", label: "Atendimentos", icon: Wrench },
-  { page: "estoque", label: "Estoque", icon: Boxes },
-  { page: "relatorios", label: "Relatorios", icon: BarChart3 }
+const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard; group: "operacao" | "consultas" | "cadastros" | "gestao" }> = [
+  { page: "dashboard", label: "Painel", icon: LayoutDashboard, group: "operacao" },
+  { page: "ordens", label: "OS", icon: ClipboardList, group: "operacao" },
+  { page: "atendimentos", label: "Atendimentos", icon: Wrench, group: "operacao" },
+  { page: "estoque", label: "Estoque", icon: Boxes, group: "operacao" },
+  { page: "mapa", label: "Mapa", icon: MapPinned, group: "consultas" },
+  { page: "historico_unidade", label: "Historico", icon: CalendarClock, group: "consultas" },
+  { page: "relatorios", label: "Relatorios", icon: BarChart3, group: "consultas" },
+  { page: "unidades", label: "Unidades", icon: MapPin, group: "cadastros" },
+  { page: "clientes", label: "Clientes", icon: UserRound, group: "cadastros" },
+  { page: "empresas", label: "Empresas", icon: Building2, group: "cadastros" },
+  { page: "contratos", label: "Contratos", icon: ClipboardList, group: "cadastros" },
+  { page: "projetos", label: "Projetos", icon: MapPin, group: "cadastros" },
+  { page: "pessoas", label: "Pessoas", icon: UserRound, group: "cadastros" },
+  { page: "pendencias", label: "Pendencias", icon: ClipboardList, group: "cadastros" },
+  { page: "usuarios", label: "Usuarios", icon: ShieldCheck, group: "gestao" }
+];
+
+const navGroups: Array<{ id: "operacao" | "consultas" | "cadastros" | "gestao"; label: string }> = [
+  { id: "operacao", label: "Operacao" },
+  { id: "consultas", label: "Consultas" },
+  { id: "cadastros", label: "Cadastros" },
+  { id: "gestao", label: "Gestao" }
 ];
 
 function findUnidade(unidades: Unidade[], ordem: Ordem) {
@@ -219,6 +229,7 @@ export function App() {
   const [estoqueConfiguracao, setEstoqueConfiguracao] = useState<EstoqueConfiguracao | null>(null);
   const [estoquePlanejamento, setEstoquePlanejamento] = useState<EstoquePlanejamento[]>([]);
   const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null);
+  const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const responsavelOptions = useMemo<ResponsavelOption[]>(
@@ -235,6 +246,12 @@ export function App() {
   const visibleNavItems = useMemo(
     () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "usuarios", "pendencias", "relatorios"].includes(item.page))),
     [isGestor]
+  );
+  const visibleNavGroups = useMemo(
+    () => navGroups
+      .map((group) => ({ ...group, items: visibleNavItems.filter((item) => item.group === group.id) }))
+      .filter((group) => group.items.length > 0),
+    [visibleNavItems]
   );
   const pageTitle = page === "historico_unidade" ? "Historico da Unidade" : navItems.find((item) => item.page === page)?.label;
 
@@ -749,6 +766,11 @@ export function App() {
     }
   }
 
+  async function selectHistoricoUnidade(idUnidade: number) {
+    const unidade = mapaUnidades.find((item) => item.idUnidade === idUnidade);
+    if (unidade) await openHistoricoUnidade(unidade);
+  }
+
   async function toggleUnidadeInstaladaAtiva(unidade: UnidadeInstalada) {
     const nextAtivo = !unidade.ativo;
     if (!window.confirm(`Confirmar ${nextAtivo ? "reativar" : "inativar"} unidade ${unidade.nome}?`)) return;
@@ -931,9 +953,9 @@ export function App() {
       .map(String)
       .map((item) => item.split(":").slice(1).join(":").trim())
       .filter(Boolean);
-    payload.responsavel = responsaveis.join(", ") || "A definir";
     payload.pendenciasIds = form.getAll("pendenciasIds").map(String).join(",");
     const editingOrdem = page === "ordens" ? selectedOrdem : null;
+    payload.responsavel = responsaveis.join(", ") || editingOrdem?.responsavel || "A definir";
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
@@ -1050,7 +1072,7 @@ export function App() {
     }
   }
 
-  async function createAtendimento(event: FormEvent<HTMLFormElement>) {
+  async function submitAtendimento(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -1059,7 +1081,7 @@ export function App() {
       .map(String)
       .map((item) => item.split(":").slice(1).join(":").trim())
       .filter(Boolean);
-    payload.equipe = atendimentoResponsaveis.join(", ") || "Equipe interna";
+    payload.equipe = atendimentoResponsaveis.join(", ") || selectedAtendimento?.equipe || "Equipe interna";
     const materialIds = form.getAll("materialId").map(String);
     const quantidades = form.getAll("materialQuantidade").map(String);
     const tiposUso = form.getAll("materialTipoUso").map(String);
@@ -1087,7 +1109,9 @@ export function App() {
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
-        await createSupabaseAtendimento(payload);
+        if (selectedAtendimento) await updateSupabaseAtendimento(selectedAtendimento.id, payload);
+        else await createSupabaseAtendimento(payload);
+        setSelectedAtendimento(null);
         formElement.reset();
         await load();
         setPage("atendimentos");
@@ -1102,7 +1126,28 @@ export function App() {
       }
     } catch (error) {
       if (hasSupabaseConfig) {
-        setErrorMessage(error instanceof Error ? error.message : "Falha ao gravar atendimento no Supabase.");
+        setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar atendimento no Supabase.");
+        return;
+      }
+      if (selectedAtendimento) {
+        setData((current) => withMetrics({
+          ...current,
+          atendimentos: current.atendimentos.map((atendimento) =>
+            atendimento.id === selectedAtendimento.id
+              ? {
+                  ...atendimento,
+                  ordemId: Number(payload.ordemId),
+                  data: String(payload.data || atendimento.data),
+                  equipe: String(payload.equipe || atendimento.equipe),
+                  status: (payload.status as Atendimento["status"]) || atendimento.status,
+                  relato: String(payload.relato || "")
+                }
+              : atendimento
+          )
+        }));
+        setSelectedAtendimento(null);
+        formElement.reset();
+        setPage("atendimentos");
         return;
       }
       const id = data.atendimentos.length ? Math.max(...data.atendimentos.map((atendimento) => atendimento.id)) + 1 : 1;
@@ -1144,6 +1189,26 @@ export function App() {
     setPage("atendimentos");
   }
 
+  async function deleteAtendimento(atendimento: Atendimento) {
+    if (atendimento.materiais.length > 0) {
+      setErrorMessage("Este atendimento possui material lancado. Para preservar o estoque, edite o relato/status em vez de excluir.");
+      return;
+    }
+    if (!window.confirm(`Excluir atendimento #${atendimento.id}?`)) return;
+    setErrorMessage("");
+    try {
+      if (hasSupabaseConfig) await deleteSupabaseAtendimento(atendimento);
+      setData((current) => withMetrics({
+        ...current,
+        atendimentos: current.atendimentos.filter((item) => item.id !== atendimento.id)
+      }));
+      if (selectedAtendimento?.id === atendimento.id) setSelectedAtendimento(null);
+      if (hasSupabaseConfig) await load();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao excluir atendimento.");
+    }
+  }
+
   async function handleSignOut() {
     setErrorMessage("");
     try {
@@ -1174,15 +1239,20 @@ export function App() {
           </div>
         </div>
         <nav>
-          {visibleNavItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.page} className={page === item.page ? "active" : ""} onClick={() => { setPage(item.page); setMenuOpen(false); }}>
-                <Icon size={18} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+          {visibleNavGroups.map((group) => (
+            <div className="nav-group" key={group.id}>
+              <span>{group.label}</span>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.page} className={page === item.page ? "active" : ""} onClick={() => { setPage(item.page); setMenuOpen(false); }}>
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="source-box">
           <span>Origem atual</span>
@@ -1783,42 +1853,66 @@ export function App() {
         {page === "historico_unidade" && (
           <HistoricoUnidadePage
             unidade={selectedMapaUnidade}
+            unidades={mapaUnidades}
             eventos={historicoUnidade}
             projetos={projetos}
             loading={historyLoading}
             canEdit={isGestor}
             onBack={() => setPage("mapa")}
+            onSelectUnidade={selectHistoricoUnidade}
             onSubmit={submitHistoricoUnidade}
           />
         )}
 
         {page === "atendimentos" && (
-          <section className="two-columns">
-            <section className="panel">
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
               <div className="panel-heading">
-                <h2>Registrar atendimento</h2>
+                <h2>Atendimentos</h2>
+                <span>{data.atendimentos.length} registros</span>
               </div>
-              <AtendimentoForm ordens={data.ordens.filter((ordem) => ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={createAtendimento} />
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Atendimento</th>
+                      <th>OS</th>
+                      <th>Equipe</th>
+                      <th>Status</th>
+                      <th>Materiais</th>
+                      <th>Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.atendimentos.map((atendimento) => {
+                      const ordem = data.ordens.find((item) => item.id === atendimento.ordemId);
+                      return (
+                        <tr key={atendimento.id}>
+                          <td><strong>#{atendimento.id}</strong><small>{atendimento.data}</small></td>
+                          <td>{ordem?.protocolo || "OS removida"}<small>{ordem?.descricao || "Sem descricao"}</small></td>
+                          <td>{atendimento.equipe}</td>
+                          <td><StatusPill value={atendimento.status} /></td>
+                          <td>{atendimento.materiais.length}<small>{atendimento.materiais.slice(0, 1).join("") || "Sem material"}</small></td>
+                          <td>
+                            <div className="row-actions">
+                              <button className="icon-button" title="Editar atendimento" onClick={() => setSelectedAtendimento(atendimento)}><Edit3 size={16} /></button>
+                              <button className="icon-button" title="Excluir atendimento" onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!data.atendimentos.length && <tr><td colSpan={6}><span className="empty-state">Nenhum atendimento registrado.</span></td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </section>
             <section className="panel">
               <div className="panel-heading">
-                <h2>Historico recente</h2>
+                <h2>{selectedAtendimento ? "Editar atendimento" : "Registrar atendimento"}</h2>
+                {selectedAtendimento && <button onClick={() => setSelectedAtendimento(null)}>Novo</button>}
               </div>
-              <div className="timeline">
-                {data.atendimentos.map((atendimento) => {
-                  const ordem = data.ordens.find((item) => item.id === atendimento.ordemId);
-                  return (
-                    <article key={atendimento.id}>
-                      <CalendarClock size={18} />
-                      <div>
-                        <strong>{ordem?.protocolo} · {atendimento.equipe}</strong>
-                        <span>{atendimento.data} · {atendimento.status}</span>
-                        <p>{atendimento.relato}</p>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+              <AtendimentoForm atendimento={selectedAtendimento} ordens={data.ordens.filter((ordem) => selectedAtendimento?.ordemId === ordem.id || ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitAtendimento} />
             </section>
           </section>
         )}
@@ -2012,29 +2106,46 @@ function UnidadesMap({
 
 function HistoricoUnidadePage({
   unidade,
+  unidades,
   eventos,
   projetos,
   loading,
   canEdit,
   onBack,
+  onSelectUnidade,
   onSubmit
 }: {
   unidade: MapaUnidade | null;
+  unidades: MapaUnidade[];
   eventos: HistoricoUnidadeEvento[];
   projetos: Projeto[];
   loading: boolean;
   canEdit: boolean;
   onBack: () => void;
+  onSelectUnidade: (idUnidade: number) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   if (!unidade) {
     return (
       <section className="panel full">
         <div className="panel-heading">
-          <h2>Historico da unidade</h2>
+          <h2>Historico das unidades</h2>
           <button onClick={onBack}><ArrowLeft size={16} />Voltar</button>
         </div>
-        <span className="empty-state">Selecione uma unidade no mapa.</span>
+        <form className="form-grid history-selector">
+          <label className="wide">
+            Unidade
+            <select defaultValue="" onChange={(event) => event.target.value && onSelectUnidade(Number(event.target.value))}>
+              <option value="" disabled>Selecione uma unidade</option>
+              {unidades.map((item) => (
+                <option key={item.idUnidade} value={item.idUnidade}>
+                  {item.codigo} · {item.nome} · {item.contratoNumero || "Sem contrato"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </form>
+        {!unidades.length && <span className="empty-state">Nenhuma unidade disponivel para consulta.</span>}
       </section>
     );
   }
@@ -2047,7 +2158,14 @@ function HistoricoUnidadePage({
             <h2>{unidade.nome}</h2>
             <span>{unidade.codigo} · {unidade.projetoNome} · Contrato {unidade.contratoNumero || "nao informado"}</span>
           </div>
-          <button onClick={onBack}><ArrowLeft size={16} />Voltar ao mapa</button>
+          <div className="row-actions">
+            <select className="history-unit-select" value={unidade.idUnidade} onChange={(event) => onSelectUnidade(Number(event.target.value))}>
+              {unidades.map((item) => (
+                <option key={item.idUnidade} value={item.idUnidade}>{item.codigo} · {item.nome}</option>
+              ))}
+            </select>
+            <button onClick={onBack}><ArrowLeft size={16} />Mapa</button>
+          </div>
         </div>
         <div className="history-summary">
           <article><span>Status</span><strong>{unidade.ativo ? unidade.statusCodigo : "Inativo"}</strong></article>
@@ -2283,24 +2401,31 @@ function OrdemForm({
 }
 
 function AtendimentoForm({
+  atendimento,
   ordens,
   materiais,
   responsavelOptions,
   onSubmit
 }: {
+  atendimento?: Atendimento | null;
   ordens: Ordem[];
   materiais: MaterialEstoque[];
   responsavelOptions: ResponsavelOption[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const [materialRows, setMaterialRows] = useState<Array<{ id: number }>>([]);
-  const [selectedOrdemId, setSelectedOrdemId] = useState(ordens[0]?.id || 0);
+  const [selectedOrdemId, setSelectedOrdemId] = useState(atendimento?.ordemId || ordens[0]?.id || 0);
   const selectedOrdem = ordens.find((ordem) => ordem.id === selectedOrdemId);
+  const responsaveisSelecionados = atendimento?.equipe.split(",").map((item) => item.trim()).filter(Boolean) || [];
+
+  useEffect(() => {
+    if (atendimento) setSelectedOrdemId(atendimento.ordemId);
+  }, [atendimento?.id, atendimento?.ordemId]);
 
   useEffect(() => {
     if (ordens.some((ordem) => ordem.id === selectedOrdemId)) return;
-    setSelectedOrdemId(ordens[0]?.id || 0);
-  }, [ordens, selectedOrdemId]);
+    setSelectedOrdemId(atendimento?.ordemId || ordens[0]?.id || 0);
+  }, [atendimento?.ordemId, ordens, selectedOrdemId]);
 
   function addMaterialRow() {
     setMaterialRows((current) => [...current, { id: Date.now() + current.length }]);
@@ -2311,7 +2436,7 @@ function AtendimentoForm({
   }
 
   return (
-    <form className="form-grid" onSubmit={onSubmit}>
+    <form key={atendimento?.id || "new"} className="form-grid" onSubmit={onSubmit}>
       <label className="wide">
         OS
         <select name="ordemId" required value={selectedOrdemId || ""} onChange={(event) => setSelectedOrdemId(Number(event.target.value))}>
@@ -2321,11 +2446,11 @@ function AtendimentoForm({
       </label>
       <label>
         Data
-        <input name="data" type="date" />
+        <input name="data" type="date" defaultValue={atendimento?.data || ""} />
       </label>
       <label>
         Status
-        <select name="status">
+        <select name="status" defaultValue={atendimento?.status || "Executado"}>
           <option>Executado</option>
           <option>Parcial</option>
           <option>Reagendado</option>
@@ -2336,14 +2461,14 @@ function AtendimentoForm({
         <div>
           {responsavelOptions.map((responsavel) => (
             <label key={responsavel.value}>
-              <input name="atendimentoResponsaveis" type="checkbox" value={responsavel.value} />
+              <input name="atendimentoResponsaveis" type="checkbox" value={responsavel.value} defaultChecked={responsaveisSelecionados.includes(responsavel.label)} />
               <span>{responsavel.label}<small>{responsavel.detail}</small></span>
             </label>
           ))}
           {!responsavelOptions.length && <span className="empty-state">Nenhum colaborador ou terceirizado ativo cadastrado.</span>}
         </div>
       </fieldset>
-      <fieldset className="attendance-pending-field wide">
+      {!atendimento && <fieldset className="attendance-pending-field wide">
         <legend>Pendencias da OS</legend>
         <div className="attendance-pending-list">
           {selectedOrdem?.pendenciasDetalhes.map((pendencia) => (
@@ -2370,12 +2495,12 @@ function AtendimentoForm({
           {selectedOrdem && !selectedOrdem.pendenciasDetalhes.length && <span className="empty-state">Esta OS nao possui pendencias cadastradas.</span>}
           {!selectedOrdem && <span className="empty-state">Selecione uma OS para ver as pendencias.</span>}
         </div>
-      </fieldset>
+      </fieldset>}
       <label className="wide">
         Relato
-        <textarea name="relato" rows={4} placeholder="O que foi executado, evidencias e pendencias" />
+        <textarea name="relato" rows={4} placeholder="O que foi executado, evidencias e pendencias" defaultValue={atendimento?.relato || ""} />
       </label>
-      <fieldset className="attendance-materials-field wide">
+      {!atendimento && <fieldset className="attendance-materials-field wide">
         <legend>Materiais e equipamentos</legend>
         <div className="attendance-materials-list">
           {materialRows.map((row) => (
@@ -2418,10 +2543,10 @@ function AtendimentoForm({
           <Plus size={16} />
           Adicionar material
         </button>
-      </fieldset>
+      </fieldset>}
       <button className="primary-button">
-        <CheckCircle2 size={16} />
-        Registrar
+        {atendimento ? <Edit3 size={16} /> : <CheckCircle2 size={16} />}
+        {atendimento ? "Salvar atendimento" : "Registrar"}
       </button>
     </form>
   );
