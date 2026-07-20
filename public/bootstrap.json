@@ -2,42 +2,12 @@
   "unidades": [
     {
       "id": 1,
-      "codigo": "UNI-001",
-      "nome": "C-Jovem Messejana",
-      "cliente": "Locabox",
-      "contrato": "Contrato C-Jovem",
-      "projeto": "Ambientes modulares",
+      "codigo": "UNI-TESTE-001",
+      "nome": "Unidade Teste 001",
+      "cliente": "Cliente Teste Locabox",
+      "contrato": "TESTE-2026-001",
+      "projeto": "Projeto Teste Manutencao",
       "municipio": "Fortaleza",
-      "status": "Instalada"
-    },
-    {
-      "id": 2,
-      "codigo": "UNI-002",
-      "nome": "SAMU Sobral",
-      "cliente": "Prefeitura de Sobral",
-      "contrato": "Locacao modular",
-      "projeto": "Saude",
-      "municipio": "Sobral",
-      "status": "Instalada"
-    },
-    {
-      "id": 3,
-      "codigo": "UNI-003",
-      "nome": "SEPUL Recife",
-      "cliente": "SEPUL Recife",
-      "contrato": "3401.1015-2022",
-      "projeto": "Operacao Recife",
-      "municipio": "Recife",
-      "status": "Em operacao"
-    },
-    {
-      "id": 4,
-      "codigo": "UNI-004",
-      "nome": "Jaboatao SDS",
-      "cliente": "SDS Jaboatao",
-      "contrato": "004-2024",
-      "projeto": "Seguranca",
-      "municipio": "Jaboatao dos Guararapes",
       "status": "Instalada"
     }
   ],
@@ -45,93 +15,51 @@
     {
       "id": 1,
       "unidadeId": 1,
-      "protocolo": "OS-2026-0001",
+      "protocolo": "OS-TESTE-001",
       "tipo": "Corretiva",
-      "prioridade": "P1",
-      "status": "Em atendimento",
-      "abertura": "2026-06-28",
-      "prazoSla": "2026-07-01",
-      "responsavel": "Equipe Fortaleza",
-      "descricao": "Revisao de ar condicionado e ajuste de vedacao.",
-      "pendencias": ["Validar dreno", "Registrar fotos finais"]
-    },
-    {
-      "id": 2,
-      "unidadeId": 2,
-      "protocolo": "OS-2026-0002",
-      "tipo": "Preventiva",
       "prioridade": "P2",
-      "status": "Agendada",
-      "abertura": "2026-06-30",
-      "prazoSla": "2026-07-04",
-      "responsavel": "Equipe Norte",
-      "descricao": "Checklist preventivo mensal.",
-      "pendencias": ["Conferir quadro eletrico", "Testar iluminacao"]
-    },
-    {
-      "id": 3,
-      "unidadeId": 3,
-      "protocolo": "OS-2026-0003",
-      "tipo": "Corretiva",
-      "prioridade": "P3",
       "status": "Pendente",
-      "abertura": "2026-06-20",
-      "prazoSla": "2026-06-27",
-      "responsavel": "Terceirizado Recife",
-      "descricao": "Porta com desalinhamento e necessidade de material.",
-      "pendencias": ["Comprar dobradica", "Agendar retorno"]
+      "abertura": "2026-07-20",
+      "prazoSla": "2026-07-22",
+      "responsavel": "Tecnico Teste, Equipe Terceira Teste",
+      "descricao": "OS de teste para validar fluxo de atendimento, pendencias e materiais.",
+      "pendencias": ["Validar funcionamento do ar condicionado"],
+      "pendenciasDetalhes": [
+        {
+          "id": 1,
+          "descricao": "Validar funcionamento do ar condicionado",
+          "status": "Pendente"
+        }
+      ]
     }
   ],
   "atendimentos": [
     {
       "id": 1,
       "ordemId": 1,
-      "data": "2026-06-29",
-      "equipe": "Equipe Fortaleza",
+      "data": "2026-07-20",
+      "equipe": "Tecnico Teste",
       "status": "Parcial",
-      "relato": "Limpeza do evaporador executada. Dreno ficou pendente para retorno.",
-      "materiais": ["Filtro de ar", "Fita aluminizada"]
+      "relato": "Atendimento de teste registrado sem baixa de material para permitir edicao e exclusao.",
+      "materiais": []
     }
   ],
   "estoque": [
     {
       "id": 1,
-      "item": "Filtro ar condicionado split",
+      "item": "Filtro de ar teste",
       "categoria": "Climatizacao",
       "unidade": "un",
-      "quantidade": 4,
-      "minimo": 6
-    },
-    {
-      "id": 2,
-      "item": "Dobradiça reforçada",
-      "categoria": "Esquadrias",
-      "unidade": "un",
-      "quantidade": 3,
+      "quantidade": 5,
       "minimo": 2
-    },
-    {
-      "id": 3,
-      "item": "Disjuntor bipolar 32A",
-      "categoria": "Eletrica",
-      "unidade": "un",
-      "quantidade": 8,
-      "minimo": 4
-    },
-    {
-      "id": 4,
-      "item": "Sifao flexivel",
-      "categoria": "Hidrossanitario",
-      "unidade": "un",
-      "quantidade": 1,
-      "minimo": 3
     }
   ],
   "metrics": {
-    "unidades": 4,
-    "ordensAbertas": 3,
-    "slaVencidas": 1,
+    "unidades": 1,
+    "ordensAbertas": 1,
+    "slaVencidas": 0,
     "atendimentos": 1,
-    "estoqueBaixo": 2
+    "atendimentosPorOs": 1,
+    "estoqueBaixo": 0
   }
 }

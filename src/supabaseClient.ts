@@ -1,4 +1,5 @@
 import { createClient, Session } from "@supabase/supabase-js";
+import { calcularMetricasManutencao } from "./maintenanceLogic";
 
 export type Status = "Aberta" | "Agendada" | "Em atendimento" | "Pendente" | "Concluida";
 export type Prioridade = "P1" | "P2" | "P3" | "P4";
@@ -291,28 +292,8 @@ export const supabase = hasSupabaseConfig
 
 export type { Session };
 
-function getSlaTone(ordem: Ordem) {
-  if (ordem.status === "Concluida") return "ok";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(`${ordem.prazoSla}T00:00:00`);
-  const diff = Math.ceil((due.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return "danger";
-  if (diff <= 2) return "warn";
-  return "ok";
-}
-
 export function metricsFor(nextData: Omit<Bootstrap, "metrics">) {
-  const abertas = nextData.ordens.filter((ordem) => ordem.status !== "Concluida");
-  const ordensComAtendimento = new Set(nextData.atendimentos.map((atendimento) => atendimento.ordemId));
-  return {
-    unidades: nextData.unidades.length,
-    ordensAbertas: abertas.length,
-    slaVencidas: abertas.filter((ordem) => getSlaTone(ordem) === "danger").length,
-    atendimentos: nextData.atendimentos.length,
-    atendimentosPorOs: ordensComAtendimento.size ? Math.round((nextData.atendimentos.length / ordensComAtendimento.size) * 100) / 100 : 0,
-    estoqueBaixo: nextData.estoque.filter((item) => item.quantidade <= item.minimo).length
-  };
+  return calcularMetricasManutencao(nextData);
 }
 
 export function withMetrics(nextData: Omit<Bootstrap, "metrics">): Bootstrap {

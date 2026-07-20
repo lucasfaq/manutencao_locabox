@@ -1,76 +1,173 @@
-insert into public.unidades (id, codigo, nome, cliente, contrato, projeto, municipio, status) values
-  (1, 'UNI-001', 'C-Jovem Messejana', 'Locabox', 'Contrato C-Jovem', 'Ambientes modulares', 'Fortaleza', 'Instalada'),
-  (2, 'UNI-002', 'SAMU Sobral', 'Prefeitura de Sobral', 'Locacao modular', 'Saude', 'Sobral', 'Instalada'),
-  (3, 'UNI-003', 'SEPUL Recife', 'SEPUL Recife', '3401.1015-2022', 'Operacao Recife', 'Recife', 'Em operacao'),
-  (4, 'UNI-004', 'Jaboatao SDS', 'SDS Jaboatao', '004-2024', 'Seguranca', 'Jaboatao dos Guararapes', 'Instalada')
-on conflict (codigo) do update set
-  nome = excluded.nome,
-  cliente = excluded.cliente,
-  contrato = excluded.contrato,
-  projeto = excluded.projeto,
-  municipio = excluded.municipio,
-  status = excluded.status;
+-- Seed destrutivo para ambiente de teste/demo.
+-- Execute somente apos backup e somente no projeto Supabase correto.
+-- Mantem cadastros de sistema, perfis e usuarios; limpa registros operacionais
+-- e cria um unico fluxo de teste: unidade -> OS -> pendencia -> atendimento.
 
-insert into public.ordens (id, unidade_id, protocolo, tipo, prioridade, status, abertura, prazo_sla, responsavel, descricao) values
-  (1, 1, 'OS-2026-0001', 'Corretiva', 'P1', 'Em atendimento', '2026-06-28', '2026-07-01', 'Equipe Fortaleza', 'Revisao de ar condicionado e ajuste de vedacao.'),
-  (2, 2, 'OS-2026-0002', 'Preventiva', 'P2', 'Agendada', '2026-06-30', '2026-07-04', 'Equipe Norte', 'Checklist preventivo mensal.'),
-  (3, 3, 'OS-2026-0003', 'Corretiva', 'P3', 'Pendente', '2026-06-20', '2026-06-27', 'Terceirizado Recife', 'Porta com desalinhamento e necessidade de material.')
-on conflict (protocolo) do update set
-  unidade_id = excluded.unidade_id,
-  tipo = excluded.tipo,
-  prioridade = excluded.prioridade,
-  status = excluded.status,
-  abertura = excluded.abertura,
-  prazo_sla = excluded.prazo_sla,
-  responsavel = excluded.responsavel,
-  descricao = excluded.descricao;
+begin;
 
-insert into public.pendencias_ordem (ordem_id, descricao)
-select * from (values
-  (1, 'Validar dreno'),
-  (1, 'Registrar fotos finais'),
-  (2, 'Conferir quadro eletrico'),
-  (2, 'Testar iluminacao'),
-  (3, 'Comprar dobradica'),
-  (3, 'Agendar retorno')
-) as source(ordem_id, descricao)
-where not exists (
-  select 1 from public.pendencias_ordem p
-  where p.ordem_id = source.ordem_id and p.descricao = source.descricao
+delete from public.atendimento_pendencias;
+delete from public.atendimento_materiais;
+delete from public.atendimentos;
+delete from public.pendencias_ordem;
+delete from public.ordens;
+delete from public.estoque;
+
+delete from public.movimentacoes_estoque;
+delete from public.movimentacoes;
+delete from public.atendimentos_executados;
+delete from public.equipes;
+delete from public.atendimentos_ordens;
+delete from public.pendencias_ordem_manutencao;
+delete from public.ordens_manutencao;
+delete from public.historico_unidade;
+delete from public.unidades_instaladas;
+delete from public.projetos;
+delete from public.contratos;
+delete from public.clientes;
+delete from public.empresas;
+delete from public.colaboradores;
+delete from public.terceirizados;
+delete from public.estoque_materiais;
+
+insert into public.clientes (id_cliente, nome, documento, email, telefone, ativo)
+values (1, 'Cliente Teste Locabox', '00000000000191', 'teste@locabox.local', '(85) 3000-0000', true);
+
+insert into public.empresas (id_empresa, razao_social, nome_fantasia, cnpj, ativo)
+values (1, 'Locabox Ambientes Modulares LTDA', 'Locabox', '00000000000192', true);
+
+insert into public.contratos (id_contrato, id_cliente, id_empresa, numero_contrato, objeto, status_codigo, data_inicio, data_fim, valor_total, ativo)
+values (1, 1, 1, 'TESTE-2026-001', 'Contrato de teste para manutencao', 'ativo', '2026-01-01', '2026-12-31', 1000.00, true);
+
+insert into public.projetos (id_projeto, id_contrato, nome, municipio, uf, ativo)
+values (1, 1, 'Projeto Teste Manutencao', 'Fortaleza', 'CE', true);
+
+insert into public.unidades_instaladas (
+  id_unidade,
+  id_projeto,
+  codigo,
+  nome,
+  estado,
+  cidade,
+  bairro,
+  rua,
+  google_maps_url,
+  latitude,
+  longitude,
+  status_codigo,
+  ativo
+) values (
+  1,
+  1,
+  'UNI-TESTE-001',
+  'Unidade Teste 001',
+  'CE',
+  'Fortaleza',
+  'Messejana',
+  'Rua de Teste, 100',
+  '',
+  -3.8311,
+  -38.4932,
+  'instalada',
+  true
 );
 
-insert into public.atendimentos (id, ordem_id, data, equipe, status, relato) values
-  (1, 1, '2026-06-29', 'Equipe Fortaleza', 'Parcial', 'Limpeza do evaporador executada. Dreno ficou pendente para retorno.')
-on conflict (id) do update set
-  ordem_id = excluded.ordem_id,
-  data = excluded.data,
-  equipe = excluded.equipe,
-  status = excluded.status,
-  relato = excluded.relato;
+insert into public.colaboradores (id_colaborador, nome, cargo, email, telefone, ativo)
+values (1, 'Tecnico Teste', 'Tecnico de manutencao', 'tecnico.teste@locabox.local', '(85) 98888-0000', true);
 
-insert into public.atendimento_materiais (atendimento_id, descricao)
-select * from (values
-  (1, 'Filtro de ar'),
-  (1, 'Fita aluminizada')
-) as source(atendimento_id, descricao)
-where not exists (
-  select 1 from public.atendimento_materiais m
-  where m.atendimento_id = source.atendimento_id and m.descricao = source.descricao
+insert into public.terceirizados (id_terceira, nome, empresa, documento, telefone, ativo)
+values (1, 'Equipe Terceira Teste', 'Fornecedor Teste', '00000000000193', '(85) 97777-0000', true);
+
+insert into public.estoque_materiais (
+  id_material,
+  codigo,
+  descricao,
+  categoria,
+  unidade_medida,
+  estoque_minimo,
+  estoque_atual,
+  nivel_servico,
+  janela_historica_dias,
+  lead_time_dias,
+  desvio_lead_time_dias,
+  periodo_revisao_dias,
+  lote_minimo,
+  multiplo_compra,
+  critico,
+  ativo
+) values (
+  1,
+  'MAT-TESTE-001',
+  'Filtro de ar teste',
+  'Climatizacao',
+  'un',
+  2,
+  5,
+  0.95,
+  90,
+  7,
+  2,
+  30,
+  1,
+  1,
+  false,
+  true
 );
 
-insert into public.estoque (id, item, categoria, unidade, quantidade, minimo) values
-  (1, 'Filtro ar condicionado split', 'Climatizacao', 'un', 4, 6),
-  (2, 'Dobradiça reforçada', 'Esquadrias', 'un', 3, 2),
-  (3, 'Disjuntor bipolar 32A', 'Eletrica', 'un', 8, 4),
-  (4, 'Sifao flexivel', 'Hidrossanitario', 'un', 1, 3)
-on conflict (id) do update set
-  item = excluded.item,
-  categoria = excluded.categoria,
-  unidade = excluded.unidade,
-  quantidade = excluded.quantidade,
-  minimo = excluded.minimo;
+insert into public.unidades (id, codigo, nome, cliente, contrato, projeto, municipio, status)
+values (1, 'UNI-TESTE-001', 'Unidade Teste 001', 'Cliente Teste Locabox', 'TESTE-2026-001', 'Projeto Teste Manutencao', 'Fortaleza', 'Instalada');
 
-select setval(pg_get_serial_sequence('public.unidades', 'id'), greatest((select max(id) from public.unidades), 1));
-select setval(pg_get_serial_sequence('public.ordens', 'id'), greatest((select max(id) from public.ordens), 1));
-select setval(pg_get_serial_sequence('public.atendimentos', 'id'), greatest((select max(id) from public.atendimentos), 1));
-select setval(pg_get_serial_sequence('public.estoque', 'id'), greatest((select max(id) from public.estoque), 1));
+insert into public.estoque (id, item, categoria, unidade, quantidade, minimo)
+values (1, 'Filtro de ar teste', 'Climatizacao', 'un', 5, 2);
+
+insert into public.ordens (
+  id,
+  unidade_id,
+  protocolo,
+  tipo,
+  prioridade,
+  status,
+  abertura,
+  prazo_sla,
+  responsavel,
+  descricao
+) values (
+  1,
+  1,
+  'OS-TESTE-001',
+  'Corretiva',
+  'P2',
+  'Pendente',
+  '2026-07-20',
+  '2026-07-22',
+  'Tecnico Teste, Equipe Terceira Teste',
+  'OS de teste para validar fluxo de atendimento, pendencias e materiais.'
+);
+
+insert into public.pendencias_ordem (id, ordem_id, descricao, status)
+values (1, 1, 'Validar funcionamento do ar condicionado', 'Pendente');
+
+insert into public.atendimentos (id, ordem_id, data, equipe, status, relato)
+values (1, 1, '2026-07-20', 'Tecnico Teste', 'Parcial', 'Atendimento de teste registrado sem baixa de material para permitir edicao e exclusao.');
+
+insert into public.atendimento_pendencias (atendimento_id, pendencia_id, status, observacao)
+values (1, 1, 'Pendente', 'Pendencia mantida em aberto para teste de acompanhamento.');
+
+insert into public.historico_unidade (id_historico, id_unidade, descricao, tipo_evento, registrado_em)
+values (1, 1, 'Registro inicial de teste da unidade para consulta de historico.', 'registro', '2026-07-20 09:00:00-03');
+
+select setval(pg_get_serial_sequence('public.clientes', 'id_cliente'), 1, true);
+select setval(pg_get_serial_sequence('public.empresas', 'id_empresa'), 1, true);
+select setval(pg_get_serial_sequence('public.contratos', 'id_contrato'), 1, true);
+select setval(pg_get_serial_sequence('public.projetos', 'id_projeto'), 1, true);
+select setval(pg_get_serial_sequence('public.unidades_instaladas', 'id_unidade'), 1, true);
+select setval(pg_get_serial_sequence('public.colaboradores', 'id_colaborador'), 1, true);
+select setval(pg_get_serial_sequence('public.terceirizados', 'id_terceira'), 1, true);
+select setval(pg_get_serial_sequence('public.estoque_materiais', 'id_material'), 1, true);
+select setval(pg_get_serial_sequence('public.unidades', 'id'), 1, true);
+select setval(pg_get_serial_sequence('public.ordens', 'id'), 1, true);
+select setval(pg_get_serial_sequence('public.pendencias_ordem', 'id'), 1, true);
+select setval(pg_get_serial_sequence('public.atendimentos', 'id'), 1, true);
+select setval(pg_get_serial_sequence('public.estoque', 'id'), 1, true);
+select setval(pg_get_serial_sequence('public.historico_unidade', 'id_historico'), 1, true);
+
+commit;

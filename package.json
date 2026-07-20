@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "db:push": "supabase db push",
     "preview": "vite preview --host 127.0.0.1",
-    "start": "node dist-server/index.js"
+    "start": "node dist-server/index.js",
+    "test": "tsx --test src/maintenanceLogic.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
