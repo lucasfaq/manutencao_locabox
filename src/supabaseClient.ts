@@ -1322,33 +1322,10 @@ export async function deleteSupabaseOrdem(ordem: Ordem): Promise<void> {
   if (!rpcError) return;
   const rpcMessage = String(rpcError.message || "");
   const missingRpc = rpcMessage.includes("Could not find the function") || rpcMessage.includes("function public.excluir_ordem_mvp");
-  if (!missingRpc) throw rpcError;
-
-  const { data: atendimentos, error: loadError } = await client
-    .from("atendimentos")
-    .select("id")
-    .eq("ordem_id", ordem.id);
-  if (loadError) throw loadError;
-
-  const atendimentoIds = (atendimentos || []).map((atendimento: any) => Number(atendimento.id));
-  if (atendimentoIds.length) {
-    const { count, error: materiaisError } = await client
-      .from("atendimento_materiais")
-      .select("id", { count: "exact", head: true })
-      .in("atendimento_id", atendimentoIds);
-    if (materiaisError) throw materiaisError;
-    if (Number(count || 0) > 0) {
-      throw new Error("Esta OS possui atendimento com material ou movimentacao de estoque. Exclua apenas OS sem baixa de material para preservar o estoque.");
-    }
-
-    const { error: atendimentosError } = await client.from("atendimentos").delete().in("id", atendimentoIds);
-    if (atendimentosError) throw atendimentosError;
+  if (missingRpc) {
+    throw new Error("O banco remoto ainda nao possui a funcao excluir_ordem_mvp. Aplique a migration 20260720005500_allow_order_delete_without_stock.sql no Supabase.");
   }
-
-  const { error: pendenciasError } = await client.from("pendencias_ordem").delete().eq("ordem_id", ordem.id);
-  if (pendenciasError) throw pendenciasError;
-  const { error } = await client.from("ordens").delete().eq("id", ordem.id);
-  if (error) throw error;
+  throw rpcError;
 }
 
 export async function createSupabaseAtendimento(payload: Record<string, FormDataEntryValue>): Promise<Atendimento> {
