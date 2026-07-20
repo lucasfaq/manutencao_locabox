@@ -180,3 +180,90 @@ Leia o handoff e continue a Fase 2 de cadastros base, implementando Empresas, us
 - Criada RPC `public.registrar_atendimento_com_materiais(...)` para registrar atendimento MVP e saidas canonicas de estoque em transacao unica.
 - Cada linha de material gera uma movimentacao de tipo `saida` em `public.movimentacoes` e `public.movimentacoes_estoque`.
 - Proximo refinamento recomendado: separar formalmente materiais consumiveis, ferramentas/equipamentos retornaveis e bens avariados em schema proprio, com controle de devolucao para emprestimos.
+
+# Retomada CRUD e permissoes — 2026-07-20
+
+## Resumo do problema
+
+O usuario reportou que o CRUD do sistema nao esta funcionando, incluindo falha ao excluir OS. A analise indicou que a causa provavel nao e apenas frontend: o app usa uma mistura de tabelas MVP antigas (`ordens`, `atendimentos`, `pendencias_ordem`, etc.) e tabelas canonicas (`clientes`, `empresas`, `contratos`, `unidades_instaladas`, etc.), enquanto as policies/RLS do Supabase estao restritivas e divergentes entre esses grupos.
+
+## Commits recentes relevantes
+
+- `8253df2` - adiciona testes de logica e seed demo.
+- `64a9924` - permite excluir OS sem uso de estoque.
+- `698cf67` - torna exclusao de OS mais compativel com RLS existente.
+- `9ab2134` - cria migracao consolidada de permissoes CRUD do app.
+- `514aeaa` - commit vazio para retry de deploy.
+- `c30da81` - ajusta concorrencia do workflow Pages para cancelar deploys anteriores.
+
+## Arquivos/mudancas importantes
+
+- `src/maintenanceLogic.ts` e `src/maintenanceLogic.test.ts`
+  - Cobrem metricas, status de pendencias, bloqueios de exclusao e responsaveis.
+- `supabase/seed.sql`
+  - Foi convertido para seed destrutivo de teste/demo com um unico fluxo operacional.
+  - Nao foi aplicado no banco remoto por seguranca.
+- `supabase/migrations/20260720012000_app_crud_permissions.sql`
+  - Principal pendencia para restaurar CRUD.
+  - Concede acesso e cria policies `app_active_manage_*` para usuario autenticado com perfil ativo.
+  - Abrange tabelas MVP e canonicas usadas pelo frontend.
+- `src/supabaseClient.ts`
+  - Removeu exclusao direta de `atendimento_pendencias` em alguns fluxos para depender de cascade, reduzindo conflito de RLS.
+
+## Validacoes feitas
+
+- `npm run test`: passou.
+- `npm run build`: passou.
+- Build do GitHub Actions tambem passou nos runs recentes.
+- Deploy do GitHub Pages falhou no job `deploy`, nao no job `build`.
+
+## Situacao do deploy
+
+Ultimo commit local/remoto: `c30da81`.
+
+Runs relevantes:
+
+- `29710323050` (`698cf67`) - deploy success.
+- `29710475499` (`9ab2134`) - build success, deploy failure.
+- `29710505436` (`514aeaa`) - build success, deploy failure.
+- `29710555593` (`c30da81`) - build success, deploy failure.
+
+Nao foi possivel baixar os logs detalhados do job de deploy via API publica, pois a API retornou `403 Must have admin rights to Repository`. A causa exata do deploy failure precisa ser conferida no GitHub Actions pela conta com permissao no repositorio.
+
+## Situacao do Supabase
+
+- Nao ha Supabase CLI disponivel localmente.
+- Nao ha `.env` real no workspace, apenas `.env.example`.
+- A migracao `20260720012000_app_crud_permissions.sql` ainda precisa ser aplicada manualmente no Supabase remoto.
+- Sem aplicar essa migracao, o frontend pode continuar exibindo falhas de CRUD por RLS/permissao mesmo que o site esteja publicado.
+
+## Proximo passo recomendado
+
+1. Abrir o run mais recente do GitHub Actions e verificar o log do job `deploy`:
+   - https://github.com/lucasfaq/manutencao_locabox/actions/runs/29710555593
+2. Corrigir a causa do deploy Pages, se for configuracao/permissao do GitHub Pages.
+3. Aplicar no Supabase remoto a migracao:
+   - `apps/manutencao-web/supabase/migrations/20260720012000_app_crud_permissions.sql`
+4. Confirmar que o usuario logado possui perfil ativo em `public.perfis`.
+5. Testar CRUD minimo no app publicado:
+   - criar/editar/inativar cliente;
+   - criar/editar OS;
+   - excluir OS sem material;
+   - criar/editar/excluir atendimento sem material;
+   - tentar excluir atendimento/OS com material e confirmar bloqueio correto.
+
+## Observacao sobre worktree
+
+Ao encerrar esta etapa, havia arquivos locais nao relacionados ao escopo que nao devem ser revertidos sem confirmacao:
+
+- `server/index.ts`
+- `server/index 2.ts`
+- `data/store(1).json`
+- `public/bootstrap(1).json`
+- `supabase/seed(1).sql`
+
+## Prompt para retomar
+
+```text
+Leia apps/manutencao-web/docs/HANDOFF.md e retome a partir da secao "Retomada CRUD e permissoes — 2026-07-20". Primeiro verifique o deploy do GitHub Pages, depois aplique/valide a migracao de permissoes CRUD no Supabase remoto.
+```
