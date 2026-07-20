@@ -26,6 +26,13 @@ export type Ordem = {
   responsavel: string;
   descricao: string;
   pendencias: string[];
+  pendenciasDetalhes: OrdemPendencia[];
+};
+
+export type OrdemPendencia = {
+  id: number;
+  descricao: string;
+  status: "Aberta" | "Pendente" | "Concluida";
 };
 
 export type Atendimento = {
@@ -262,6 +269,7 @@ export type Bootstrap = {
     ordensAbertas: number;
     slaVencidas: number;
     atendimentos: number;
+    atendimentosPorOs: number;
     estoqueBaixo: number;
   };
 };
@@ -295,11 +303,13 @@ function getSlaTone(ordem: Ordem) {
 
 export function metricsFor(nextData: Omit<Bootstrap, "metrics">) {
   const abertas = nextData.ordens.filter((ordem) => ordem.status !== "Concluida");
+  const ordensComAtendimento = new Set(nextData.atendimentos.map((atendimento) => atendimento.ordemId));
   return {
     unidades: nextData.unidades.length,
     ordensAbertas: abertas.length,
     slaVencidas: abertas.filter((ordem) => getSlaTone(ordem) === "danger").length,
     atendimentos: nextData.atendimentos.length,
+    atendimentosPorOs: ordensComAtendimento.size ? Math.round((nextData.atendimentos.length / ordensComAtendimento.size) * 100) / 100 : 0,
     estoqueBaixo: nextData.estoque.filter((item) => item.quantidade <= item.minimo).length
   };
 }
@@ -320,7 +330,12 @@ function mapOrdem(row: any): Ordem {
     prazoSla: row.prazo_sla,
     responsavel: row.responsavel,
     descricao: row.descricao,
-    pendencias: (row.pendencias_ordem || []).map((item: any) => item.descricao)
+    pendencias: (row.pendencias_ordem || []).map((item: any) => item.descricao),
+    pendenciasDetalhes: (row.pendencias_ordem || []).map((item: any) => ({
+      id: Number(item.id),
+      descricao: item.descricao,
+      status: item.status || "Aberta"
+    }))
   };
 }
 
@@ -1166,7 +1181,7 @@ export async function loadSupabaseBootstrap(): Promise<Bootstrap> {
   const client = requireSupabase();
   const [unidadesResult, ordensResult, atendimentosResult, estoqueResult] = await Promise.all([
     client.from("unidades").select("*").order("nome"),
-    client.from("ordens").select("*, pendencias_ordem(descricao)").order("id", { ascending: false }),
+    client.from("ordens").select("*, pendencias_ordem(id, descricao, status)").order("id", { ascending: false }),
     client.from("atendimentos").select("*, atendimento_materiais(descricao)").order("id", { ascending: false }),
     client.from("estoque").select("*").order("item")
   ]);
@@ -1242,12 +1257,13 @@ export async function createSupabaseOrdem(payload: Record<string, FormDataEntryV
     if (pendenciaError) throw pendenciaError;
   }
 
-  return mapOrdem({ ...data, pendencias_ordem: pendencias.map((descricao) => ({ descricao })) });
+  return mapOrdem({ ...data, pendencias_ordem: pendencias.map((descricao) => ({ id: 0, descricao, status: "Aberta" })) });
 }
 
 export async function createSupabaseAtendimento(payload: Record<string, FormDataEntryValue>): Promise<Atendimento> {
   const client = requireSupabase();
   const materiais = parseAtendimentoMateriais(payload.materiaisJson);
+  const pendencias = parseAtendimentoPendencias(payload.pendenciasJson);
   const dataAtendimento = String(payload.data || new Date().toISOString().slice(0, 10));
   const equipe = String(payload.equipe || "Equipe interna");
   const status = String(payload.status || "Executado") as Atendimento["status"];
@@ -1258,7 +1274,8 @@ export async function createSupabaseAtendimento(payload: Record<string, FormData
     p_status: status,
     p_equipe: equipe,
     p_relato: relato,
-    p_materiais: materiais
+    p_materiais: materiais,
+    p_pendencias: pendencias
   });
   if (error) throw error;
 
@@ -1284,4 +1301,16 @@ function parseAtendimentoMateriais(value: unknown): AtendimentoMaterialUso[] {
       observacao: String(item.observacao || "").trim()
     }))
     .filter((item) => item.idMaterial > 0 && item.quantidade > 0);
+}
+
+function parseAtendimentoPendencias(value: unknown) {
+  if (!value) return [];
+  const parsed = JSON.parse(String(value)) as Array<{ idPendencia?: number; status?: string; observacao?: string }>;
+  return parsed
+    .map((item) => ({
+      idPendencia: Number(item.idPendencia),
+      status: String(item.status || "Pendente"),
+      observacao: String(item.observacao || "").trim()
+    }))
+    .filter((item) => item.idPendencia > 0);
 }

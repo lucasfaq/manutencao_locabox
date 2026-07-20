@@ -302,7 +302,7 @@ main {
 
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 14px;
 }
 
@@ -511,7 +511,9 @@ main {
   justify-self: start;
 }
 
-.standard-pending-field {
+.standard-pending-field,
+.responsible-field,
+.attendance-pending-field {
   display: grid;
   gap: 10px;
   margin: 0;
@@ -521,20 +523,24 @@ main {
   background: #fbfcfa;
 }
 
-.standard-pending-field legend {
+.standard-pending-field legend,
+.responsible-field legend,
+.attendance-pending-field legend {
   padding: 0 5px;
   color: #55655c;
   font-size: 13px;
   font-weight: 700;
 }
 
-.standard-pending-field > div {
+.standard-pending-field > div,
+.responsible-field > div {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.standard-pending-field label {
+.standard-pending-field label,
+.responsible-field label {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -548,10 +554,45 @@ main {
   font-weight: 700;
 }
 
-.standard-pending-field input {
+.responsible-field small {
+  display: block;
+  margin-top: 2px;
+  color: #66746c;
+  font-weight: 600;
+}
+
+.standard-pending-field input,
+.responsible-field input {
   width: 16px;
   height: 16px;
   padding: 0;
+}
+
+.attendance-pending-list {
+  display: grid;
+  gap: 10px;
+}
+
+.attendance-pending-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(140px, 0.7fr) minmax(220px, 1fr);
+  gap: 10px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid #e2e8e3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.attendance-pending-row > div {
+  display: grid;
+  gap: 7px;
+  align-self: center;
+}
+
+.attendance-pending-row strong {
+  color: #17211c;
+  font-size: 13px;
 }
 
 .attendance-materials-field {
@@ -1176,6 +1217,7 @@ td small {
   .reports-grid,
   .form-grid,
   .unit-filters,
+  .attendance-pending-row,
   .attendance-material-row {
     grid-template-columns: 1fr;
   }

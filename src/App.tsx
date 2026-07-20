@@ -111,13 +111,14 @@ import {
 } from "./supabaseClient";
 
 type Page = "dashboard" | "clientes" | "empresas" | "contratos" | "projetos" | "pessoas" | "usuarios" | "pendencias" | "ordens" | "unidades" | "mapa" | "historico_unidade" | "atendimentos" | "estoque" | "relatorios";
+type ResponsavelOption = { value: string; label: string; detail: string };
 
 const initialData: Bootstrap = {
   unidades: [],
   ordens: [],
   atendimentos: [],
   estoque: [],
-  metrics: { unidades: 0, ordensAbertas: 0, slaVencidas: 0, atendimentos: 0, estoqueBaixo: 0 }
+  metrics: { unidades: 0, ordensAbertas: 0, slaVencidas: 0, atendimentos: 0, atendimentosPorOs: 0, estoqueBaixo: 0 }
 };
 
 const navItems: Array<{ page: Page; label: string; icon: typeof LayoutDashboard }> = [
@@ -216,6 +217,17 @@ export function App() {
   const [estoquePlanejamento, setEstoquePlanejamento] = useState<EstoquePlanejamento[]>([]);
 
   const isGestor = perfil?.perfil === "gestor";
+  const responsavelOptions = useMemo<ResponsavelOption[]>(
+    () => [
+      ...colaboradores
+        .filter((item) => item.ativo)
+        .map((item) => ({ value: `colaborador:${item.nome}`, label: item.nome, detail: item.cargo || "Colaborador" })),
+      ...terceirizados
+        .filter((item) => item.ativo)
+        .map((item) => ({ value: `terceirizado:${item.nome}`, label: item.nome, detail: item.empresa || "Equipe terceirizada" }))
+    ],
+    [colaboradores, terceirizados]
+  );
   const visibleNavItems = useMemo(
     () => navItems.filter((item) => isGestor || (!["clientes", "empresas", "contratos", "projetos", "pessoas", "usuarios", "pendencias", "relatorios"].includes(item.page))),
     [isGestor]
@@ -303,7 +315,7 @@ export function App() {
   }
 
   async function loadPessoas() {
-    if (!hasSupabaseConfig || !isGestor) {
+    if (!hasSupabaseConfig || !session) {
       setColaboradores([]);
       setTerceirizados([]);
       setSelectedColaborador(null);
@@ -398,7 +410,7 @@ export function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos" || page === "pessoas" || page === "usuarios") && !isGestor) {
+    if ((page === "clientes" || page === "empresas" || page === "contratos" || page === "projetos" || page === "pessoas" || page === "usuarios" || page === "pendencias" || page === "relatorios") && !isGestor) {
       setPage("dashboard");
     }
   }, [isGestor, page]);
@@ -911,6 +923,11 @@ export function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
+    const responsaveis = form.getAll("responsaveis")
+      .map(String)
+      .map((item) => item.split(":").slice(1).join(":").trim())
+      .filter(Boolean);
+    payload.responsavel = responsaveis.join(", ") || "A definir";
     payload.pendenciasIds = form.getAll("pendenciasIds").map(String).join(",");
     setErrorMessage("");
     try {
@@ -948,7 +965,12 @@ export function App() {
         pendencias: String(payload.pendenciasIds || "")
           .split(",")
           .map((item) => pendenciasPadrao.find((pendencia) => pendencia.idPendencia === Number(item))?.descricao)
-          .filter(Boolean) as string[]
+          .filter(Boolean) as string[],
+        pendenciasDetalhes: String(payload.pendenciasIds || "")
+          .split(",")
+          .map((item) => pendenciasPadrao.find((pendencia) => pendencia.idPendencia === Number(item)))
+          .filter(Boolean)
+          .map((pendencia) => ({ id: 0, descricao: pendencia!.descricao, status: "Aberta" }))
       };
       setData((current) => withMetrics({ ...current, ordens: [ordem, ...current.ordens] }));
       formElement.reset();
@@ -965,6 +987,11 @@ export function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
+    const atendimentoResponsaveis = form.getAll("atendimentoResponsaveis")
+      .map(String)
+      .map((item) => item.split(":").slice(1).join(":").trim())
+      .filter(Boolean);
+    payload.equipe = atendimentoResponsaveis.join(", ") || "Equipe interna";
     const materialIds = form.getAll("materialId").map(String);
     const quantidades = form.getAll("materialQuantidade").map(String);
     const tiposUso = form.getAll("materialTipoUso").map(String);
@@ -978,6 +1005,17 @@ export function App() {
       }))
       .filter((item) => item.idMaterial > 0 && item.quantidade > 0);
     payload.materiaisJson = JSON.stringify(materiaisUso);
+    const pendenciaIds = form.getAll("pendenciaId").map(String);
+    const pendenciaStatus = form.getAll("pendenciaStatus").map(String);
+    const pendenciaObservacao = form.getAll("pendenciaObservacao").map(String);
+    const pendenciasAcompanhamento = pendenciaIds
+      .map((idPendencia, index) => ({
+        idPendencia: Number(idPendencia),
+        status: pendenciaStatus[index] || "Pendente",
+        observacao: pendenciaObservacao[index] || ""
+      }))
+      .filter((item) => item.idPendencia > 0);
+    payload.pendenciasJson = JSON.stringify(pendenciasAcompanhamento);
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
@@ -1015,11 +1053,19 @@ export function App() {
       setData((current) => withMetrics({
         ...current,
         atendimentos: [atendimento, ...current.atendimentos],
-        ordens: current.ordens.map((ordem) =>
-          ordem.id === atendimento.ordemId
-            ? { ...ordem, status: atendimento.status === "Executado" ? "Concluida" : "Pendente" }
-            : ordem
-        )
+        ordens: current.ordens.map((ordem) => {
+          if (ordem.id !== atendimento.ordemId) return ordem;
+          const pendenciasDetalhes = ordem.pendenciasDetalhes.map((pendencia) => {
+            const acompanhamento = pendenciasAcompanhamento.find((item) => item.idPendencia === pendencia.id);
+            return acompanhamento ? { ...pendencia, status: acompanhamento.status as typeof pendencia.status } : pendencia;
+          });
+          const todasConcluidas = pendenciasDetalhes.length > 0 && pendenciasDetalhes.every((pendencia) => pendencia.status === "Concluida");
+          return {
+            ...ordem,
+            pendenciasDetalhes,
+            status: todasConcluidas || (pendenciasDetalhes.length === 0 && atendimento.status === "Executado") ? "Concluida" : "Pendente"
+          };
+        })
       }));
       formElement.reset();
       setPage("atendimentos");
@@ -1122,6 +1168,7 @@ export function App() {
               <StatCard label="Unidades" value={data.metrics.unidades} icon={MapPin} />
               <StatCard label="OS abertas" value={data.metrics.ordensAbertas} icon={ClipboardList} />
               <StatCard label="SLA vencido" value={data.metrics.slaVencidas} icon={AlertTriangle} tone="danger" />
+              <StatCard label="Atend./OS" value={data.metrics.atendimentosPorOs} icon={Wrench} />
               <StatCard label="Estoque baixo" value={data.metrics.estoqueBaixo} icon={PackageSearch} tone="warn" />
             </div>
 
@@ -1155,7 +1202,7 @@ export function App() {
                 <div className="panel-heading">
                   <h2>Nova OS</h2>
                 </div>
-                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} onSubmit={createOrdem} />
+                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={createOrdem} />
               </section>
             </div>
           </section>
@@ -1492,12 +1539,14 @@ export function App() {
                     <th>Status</th>
                     <th>SLA</th>
                     <th>Responsavel</th>
+                    <th>Atend.</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredOrdens.map((ordem) => {
                     const unidade = findUnidade(data.unidades, ordem);
                     const sla = getSla(ordem);
+                    const totalAtendimentos = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id).length;
                     return (
                       <tr key={ordem.id}>
                         <td><strong>{ordem.protocolo}</strong><small>{ordem.tipo}</small></td>
@@ -1506,6 +1555,7 @@ export function App() {
                         <td><StatusPill value={ordem.status} /></td>
                         <td><span className={`pill ${sla.tone}`}>{sla.label}</span><small>{ordem.prazoSla}</small></td>
                         <td>{ordem.responsavel}</td>
+                        <td>{totalAtendimentos}</td>
                       </tr>
                     );
                   })}
@@ -1661,7 +1711,7 @@ export function App() {
               <div className="panel-heading">
                 <h2>Registrar atendimento</h2>
               </div>
-              <AtendimentoForm ordens={data.ordens.filter((ordem) => ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} onSubmit={createAtendimento} />
+              <AtendimentoForm ordens={data.ordens.filter((ordem) => ordem.status !== "Concluida")} materiais={materiais.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={createAtendimento} />
             </section>
             <section className="panel">
               <div className="panel-heading">
@@ -2010,10 +2060,12 @@ function AuthScreen({
 function OrdemForm({
   unidades,
   pendenciasPadrao,
+  responsavelOptions,
   onSubmit
 }: {
   unidades: Unidade[];
   pendenciasPadrao: PendenciaPadrao[];
+  responsavelOptions: ResponsavelOption[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -2045,10 +2097,18 @@ function OrdemForm({
         Prazo SLA
         <input name="prazoSla" type="date" required />
       </label>
-      <label>
-        Responsavel
-        <input name="responsavel" placeholder="Equipe ou tecnico" />
-      </label>
+      <fieldset className="responsible-field wide">
+        <legend>Responsavel</legend>
+        <div>
+          {responsavelOptions.map((responsavel) => (
+            <label key={responsavel.value}>
+              <input name="responsaveis" type="checkbox" value={responsavel.value} />
+              <span>{responsavel.label}<small>{responsavel.detail}</small></span>
+            </label>
+          ))}
+          {!responsavelOptions.length && <span className="empty-state">Nenhum colaborador ou terceirizado ativo cadastrado.</span>}
+        </div>
+      </fieldset>
       <label className="wide">
         Descricao
         <textarea name="descricao" placeholder="Resumo da solicitacao" rows={3} />
@@ -2076,13 +2136,22 @@ function OrdemForm({
 function AtendimentoForm({
   ordens,
   materiais,
+  responsavelOptions,
   onSubmit
 }: {
   ordens: Ordem[];
   materiais: MaterialEstoque[];
+  responsavelOptions: ResponsavelOption[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const [materialRows, setMaterialRows] = useState<Array<{ id: number }>>([]);
+  const [selectedOrdemId, setSelectedOrdemId] = useState(ordens[0]?.id || 0);
+  const selectedOrdem = ordens.find((ordem) => ordem.id === selectedOrdemId);
+
+  useEffect(() => {
+    if (ordens.some((ordem) => ordem.id === selectedOrdemId)) return;
+    setSelectedOrdemId(ordens[0]?.id || 0);
+  }, [ordens, selectedOrdemId]);
 
   function addMaterialRow() {
     setMaterialRows((current) => [...current, { id: Date.now() + current.length }]);
@@ -2096,7 +2165,8 @@ function AtendimentoForm({
     <form className="form-grid" onSubmit={onSubmit}>
       <label className="wide">
         OS
-        <select name="ordemId" required>
+        <select name="ordemId" required value={selectedOrdemId || ""} onChange={(event) => setSelectedOrdemId(Number(event.target.value))}>
+          <option value="" disabled>Selecione</option>
           {ordens.map((ordem) => <option key={ordem.id} value={ordem.id}>{ordem.protocolo} · {ordem.descricao}</option>)}
         </select>
       </label>
@@ -2112,10 +2182,46 @@ function AtendimentoForm({
           <option>Reagendado</option>
         </select>
       </label>
-      <label className="wide">
-        Equipe
-        <input name="equipe" placeholder="Equipe responsavel" />
-      </label>
+      <fieldset className="responsible-field wide">
+        <legend>Equipe do atendimento</legend>
+        <div>
+          {responsavelOptions.map((responsavel) => (
+            <label key={responsavel.value}>
+              <input name="atendimentoResponsaveis" type="checkbox" value={responsavel.value} />
+              <span>{responsavel.label}<small>{responsavel.detail}</small></span>
+            </label>
+          ))}
+          {!responsavelOptions.length && <span className="empty-state">Nenhum colaborador ou terceirizado ativo cadastrado.</span>}
+        </div>
+      </fieldset>
+      <fieldset className="attendance-pending-field wide">
+        <legend>Pendencias da OS</legend>
+        <div className="attendance-pending-list">
+          {selectedOrdem?.pendenciasDetalhes.map((pendencia) => (
+            <div className="attendance-pending-row" key={pendencia.id || pendencia.descricao}>
+              <input type="hidden" name="pendenciaId" value={pendencia.id} />
+              <div>
+                <strong>{pendencia.descricao}</strong>
+                <StatusPill value={pendencia.status} />
+              </div>
+              <label>
+                Status
+                <select name="pendenciaStatus" defaultValue={pendencia.status === "Concluida" ? "Concluida" : "Pendente"}>
+                  <option value="Aberta">Aberta</option>
+                  <option value="Pendente">Pendente</option>
+                  <option value="Concluida">Concluida</option>
+                </select>
+              </label>
+              <label>
+                Observacao
+                <input name="pendenciaObservacao" maxLength={180} placeholder="Andamento desta pendencia" />
+              </label>
+            </div>
+          ))}
+          {selectedOrdem && !selectedOrdem.pendenciasDetalhes.length && <span className="empty-state">Esta OS nao possui pendencias cadastradas.</span>}
+          {!selectedOrdem && <span className="empty-state">Selecione uma OS para ver as pendencias.</span>}
+        </div>
+      </fieldset>
       <label className="wide">
         Relato
         <textarea name="relato" rows={4} placeholder="O que foi executado, evidencias e pendencias" />
