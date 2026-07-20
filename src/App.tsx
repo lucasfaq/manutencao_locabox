@@ -236,9 +236,21 @@ function StatusPill({ value }: { value: string }) {
   return <span className={`pill ${tone}`}>{value}</span>;
 }
 
-function StatCard({ label, value, icon: Icon, tone }: { label: string; value: number | string; icon: typeof LayoutDashboard; tone?: string }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+  description
+}: {
+  label: string;
+  value: number | string;
+  icon: typeof LayoutDashboard;
+  tone?: string;
+  description: string;
+}) {
   return (
-    <div className={`stat-card ${tone || ""}`}>
+    <div className={`stat-card ${tone || ""}`} data-tooltip={description} tabIndex={0}>
       <div className="stat-icon">
         <Icon size={18} />
       </div>
@@ -1556,18 +1568,18 @@ export function App() {
         {page === "dashboard" && (
           <section className="content-grid">
             <div className="stats-row">
-              <StatCard label="Unidades" value={dashboardMetrics.unidades} icon={MapPin} />
-              <StatCard label="OS abertas" value={dashboardMetrics.ordensAbertas} icon={ClipboardList} />
-              <StatCard label="OS ultimos 15 dias" value={maintenanceDashboard.ordensUltimos15} icon={CalendarClock} />
-              <StatCard label="OS abertas > 15 dias" value={maintenanceDashboard.ordensAbertasMais15} icon={AlertTriangle} tone="danger" />
-              <StatCard label="Atend. ultimos 30 dias" value={maintenanceDashboard.atendimentosUltimos30} icon={Wrench} />
-              <StatCard label="MTTA" value={formatDays(maintenanceDashboard.mtta)} icon={CalendarClock} />
-              <StatCard label="MTTR" value={formatDays(maintenanceDashboard.mttr)} icon={CheckCircle2} />
-              <StatCard label="MTBF" value={formatDays(maintenanceDashboard.mtbf)} icon={BarChart3} />
-              <StatCard label="SLA no prazo" value={formatPercent(maintenanceDashboard.slaAtendidoPercentual)} icon={ShieldCheck} />
-              <StatCard label="SLA vencido" value={dashboardMetrics.slaVencidas} icon={AlertTriangle} tone="danger" />
-              <StatCard label="Atend./OS" value={dashboardMetrics.atendimentosPorOs} icon={Wrench} />
-              <StatCard label="Estoque baixo" value={dashboardMetrics.estoqueBaixo} icon={PackageSearch} tone="warn" />
+              <StatCard label="Unidades" value={dashboardMetrics.unidades} icon={MapPin} description="Total de unidades instaladas ativas carregadas no sistema." />
+              <StatCard label="OS abertas" value={dashboardMetrics.ordensAbertas} icon={ClipboardList} description="Ordens de servico que ainda nao foram concluidas." />
+              <StatCard label="OS ultimos 15 dias" value={maintenanceDashboard.ordensUltimos15} icon={CalendarClock} description="Ordens de servico abertas nos ultimos 15 dias." />
+              <StatCard label="OS abertas > 15 dias" value={maintenanceDashboard.ordensAbertasMais15} icon={AlertTriangle} tone="danger" description="Ordens ainda abertas cuja data de abertura passou de 15 dias." />
+              <StatCard label="Atend. ultimos 30 dias" value={maintenanceDashboard.atendimentosUltimos30} icon={Wrench} description="Atendimentos registrados nos ultimos 30 dias." />
+              <StatCard label="MTTA" value={formatDays(maintenanceDashboard.mtta)} icon={CalendarClock} description="Tempo medio entre a abertura da OS e o primeiro atendimento registrado." />
+              <StatCard label="MTTR" value={formatDays(maintenanceDashboard.mttr)} icon={CheckCircle2} description="Tempo medio entre a abertura e a finalizacao das OS concluidas." />
+              <StatCard label="MTBF" value={formatDays(maintenanceDashboard.mtbf)} icon={BarChart3} description="Tempo medio entre a abertura de uma OS e a abertura da OS seguinte." />
+              <StatCard label="SLA no prazo" value={formatPercent(maintenanceDashboard.slaAtendidoPercentual)} icon={ShieldCheck} description="Percentual de OS com primeiro atendimento realizado ate o prazo de SLA." />
+              <StatCard label="SLA vencido" value={dashboardMetrics.slaVencidas} icon={AlertTriangle} tone="danger" description="Ordens abertas cujo prazo de SLA ja venceu." />
+              <StatCard label="Atend./OS" value={dashboardMetrics.atendimentosPorOs} icon={Wrench} description="Media de atendimentos registrados por ordem de servico." />
+              <StatCard label="Estoque baixo" value={dashboardMetrics.estoqueBaixo} icon={PackageSearch} tone="warn" description="Materiais ativos com estoque atual menor ou igual ao estoque minimo." />
             </div>
 
             <div className="two-columns">

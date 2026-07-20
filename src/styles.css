@@ -390,8 +390,8 @@ main {
 
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .stat-card,
@@ -406,11 +406,48 @@ main {
 }
 
 .stat-card {
+  position: relative;
   min-height: 104px;
   padding: 18px;
   display: flex;
   align-items: center;
   gap: 14px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.stat-card:hover,
+.stat-card:focus-visible {
+  border-color: #cbd8ce;
+  box-shadow: 0 14px 30px rgba(23, 33, 28, 0.1);
+  transform: translateY(-1px);
+}
+
+.stat-card::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: calc(100% + 10px);
+  z-index: 12;
+  padding: 10px 12px;
+  border: 1px solid #dfe7e1;
+  border-radius: 8px;
+  background: #17211c;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.stat-card:hover::after,
+.stat-card:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .stat-icon {
