@@ -438,21 +438,7 @@ main {
 }
 
 .maintenance-ranking table {
-  min-width: 420px;
-}
-
-.maintenance-ranking th {
-  padding: 3px 6px;
-  background: #1f5593;
-  color: #ffffff;
-  font-size: 13px;
-  text-transform: none;
-}
-
-.maintenance-ranking td {
-  padding: 3px 6px;
-  border-bottom: 0;
-  font-size: 13px;
+  min-width: 360px;
 }
 
 .maintenance-ranking th:last-child,
