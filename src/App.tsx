@@ -42,6 +42,7 @@ import {
   createSupabaseEmpresa,
   createSupabaseMaterial,
   createSupabaseAtendimento,
+  createHistoricoUnidade,
   createSupabaseOrdem,
   createSupabasePendenciaPadrao,
   createSupabaseProjeto,
@@ -93,6 +94,7 @@ import {
   signOut,
   supabase,
   resolveGoogleMapsLink,
+  deleteSupabaseOrdem,
   updateAdminUser,
   updateEstoqueConfiguracao,
   updateSupabaseMaterial,
@@ -100,6 +102,7 @@ import {
   updateSupabaseColaborador,
   updateSupabaseContrato,
   updateSupabaseEmpresa,
+  updateSupabaseOrdem,
   updateSupabasePendenciaPadrao,
   updateSupabaseProjeto,
   updateSupabaseTerceirizado,
@@ -215,6 +218,7 @@ export function App() {
   const [selectedMaterial, setSelectedMaterial] = useState<MaterialEstoque | null>(null);
   const [estoqueConfiguracao, setEstoqueConfiguracao] = useState<EstoqueConfiguracao | null>(null);
   const [estoquePlanejamento, setEstoquePlanejamento] = useState<EstoquePlanejamento[]>([]);
+  const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null);
 
   const isGestor = perfil?.perfil === "gestor";
   const responsavelOptions = useMemo<ResponsavelOption[]>(
@@ -918,7 +922,7 @@ export function App() {
     }
   }
 
-  async function createOrdem(event: FormEvent<HTMLFormElement>) {
+  async function submitOrdem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -929,10 +933,13 @@ export function App() {
       .filter(Boolean);
     payload.responsavel = responsaveis.join(", ") || "A definir";
     payload.pendenciasIds = form.getAll("pendenciasIds").map(String).join(",");
+    const editingOrdem = page === "ordens" ? selectedOrdem : null;
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
-        await createSupabaseOrdem(payload);
+        if (editingOrdem) await updateSupabaseOrdem(editingOrdem.id, payload);
+        else await createSupabaseOrdem(payload);
+        setSelectedOrdem(null);
         formElement.reset();
         await load();
         setPage("ordens");
@@ -947,7 +954,30 @@ export function App() {
       }
     } catch (error) {
       if (hasSupabaseConfig) {
-        setErrorMessage(error instanceof Error ? error.message : "Falha ao gravar OS no Supabase.");
+        setErrorMessage(error instanceof Error ? error.message : "Falha ao salvar OS no Supabase.");
+        return;
+      }
+      if (editingOrdem) {
+        setData((current) => withMetrics({
+          ...current,
+          ordens: current.ordens.map((ordem) =>
+            ordem.id === editingOrdem.id
+              ? {
+                  ...ordem,
+                  unidadeId: Number(payload.unidadeId),
+                  tipo: String(payload.tipo || "Corretiva"),
+                  prioridade: (payload.prioridade as Ordem["prioridade"]) || "P3",
+                  status: (payload.status as Ordem["status"]) || ordem.status,
+                  prazoSla: String(payload.prazoSla),
+                  responsavel: String(payload.responsavel || "A definir"),
+                  descricao: String(payload.descricao || "")
+                }
+              : ordem
+          )
+        }));
+        setSelectedOrdem(null);
+        formElement.reset();
+        setPage("ordens");
         return;
       }
       const id = data.ordens.length ? Math.max(...data.ordens.map((ordem) => ordem.id)) + 1 : 1;
@@ -980,6 +1010,44 @@ export function App() {
     formElement.reset();
     await load();
     setPage("ordens");
+  }
+
+  async function deleteOrdem(ordem: Ordem) {
+    const totalAtendimentos = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id).length;
+    if (totalAtendimentos > 0) {
+      setErrorMessage("Esta OS ja possui atendimento registrado. Para preservar o historico, altere o status em vez de excluir.");
+      return;
+    }
+    if (!window.confirm(`Excluir a OS ${ordem.protocolo}?`)) return;
+    setErrorMessage("");
+    try {
+      if (hasSupabaseConfig) await deleteSupabaseOrdem(ordem);
+      setData((current) => withMetrics({ ...current, ordens: current.ordens.filter((item) => item.id !== ordem.id) }));
+      if (selectedOrdem?.id === ordem.id) setSelectedOrdem(null);
+      if (hasSupabaseConfig) await load();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao excluir OS.");
+    }
+  }
+
+  async function submitHistoricoUnidade(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(formElement).entries());
+    setErrorMessage("");
+    try {
+      await createHistoricoUnidade(payload);
+      formElement.reset();
+      if (selectedMapaUnidade) {
+        const [nextHistorico, nextMapa] = await Promise.all([loadHistoricoUnidade(selectedMapaUnidade.idUnidade), loadMapaUnidades()]);
+        setHistoricoUnidade(nextHistorico);
+        setMapaUnidades(nextMapa);
+        setSelectedMapaUnidade(nextMapa.find((unidade) => unidade.idUnidade === selectedMapaUnidade.idUnidade) || selectedMapaUnidade);
+      }
+      await loadUnidadesInstaladas();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao registrar historico da unidade.");
+    }
   }
 
   async function createAtendimento(event: FormEvent<HTMLFormElement>) {
@@ -1202,7 +1270,7 @@ export function App() {
                 <div className="panel-heading">
                   <h2>Nova OS</h2>
                 </div>
-                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={createOrdem} />
+                <OrdemForm unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitOrdem} />
               </section>
             </div>
           </section>
@@ -1524,44 +1592,60 @@ export function App() {
         )}
 
         {page === "ordens" && (
-          <section className="panel full">
-            <div className="panel-heading">
-              <h2>Ordens de servico</h2>
-              <span>{filteredOrdens.length} registros</span>
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>OS</th>
-                    <th>Unidade</th>
-                    <th>Prioridade</th>
-                    <th>Status</th>
-                    <th>SLA</th>
-                    <th>Responsavel</th>
-                    <th>Atend.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredOrdens.map((ordem) => {
-                    const unidade = findUnidade(data.unidades, ordem);
-                    const sla = getSla(ordem);
-                    const totalAtendimentos = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id).length;
-                    return (
-                      <tr key={ordem.id}>
-                        <td><strong>{ordem.protocolo}</strong><small>{ordem.tipo}</small></td>
-                        <td>{unidade?.nome}<small>{unidade?.cliente}</small></td>
-                        <td><span className="priority">{ordem.prioridade}</span></td>
-                        <td><StatusPill value={ordem.status} /></td>
-                        <td><span className={`pill ${sla.tone}`}>{sla.label}</span><small>{ordem.prazoSla}</small></td>
-                        <td>{ordem.responsavel}</td>
-                        <td>{totalAtendimentos}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <section className="two-columns catalog-layout">
+            <section className="panel full">
+              <div className="panel-heading">
+                <h2>Ordens de servico</h2>
+                <span>{filteredOrdens.length} registros</span>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>OS</th>
+                      <th>Unidade</th>
+                      <th>Prioridade</th>
+                      <th>Status</th>
+                      <th>SLA</th>
+                      <th>Responsavel</th>
+                      <th>Atend.</th>
+                      <th>Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrdens.map((ordem) => {
+                      const unidade = findUnidade(data.unidades, ordem);
+                      const sla = getSla(ordem);
+                      const totalAtendimentos = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id).length;
+                      return (
+                        <tr key={ordem.id}>
+                          <td><strong>{ordem.protocolo}</strong><small>{ordem.tipo}</small></td>
+                          <td>{unidade?.nome}<small>{unidade?.cliente}</small></td>
+                          <td><span className="priority">{ordem.prioridade}</span></td>
+                          <td><StatusPill value={ordem.status} /></td>
+                          <td><span className={`pill ${sla.tone}`}>{sla.label}</span><small>{ordem.prazoSla}</small></td>
+                          <td>{ordem.responsavel}</td>
+                          <td>{totalAtendimentos}</td>
+                          <td>
+                            <div className="row-actions">
+                              <button className="icon-button" title="Editar OS" onClick={() => setSelectedOrdem(ordem)}><Edit3 size={16} /></button>
+                              <button className="icon-button" title="Excluir OS" onClick={() => deleteOrdem(ordem)}><Trash2 size={16} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>{selectedOrdem ? "Editar OS" : "Nova OS"}</h2>
+                {selectedOrdem && <button onClick={() => setSelectedOrdem(null)}>Nova</button>}
+              </div>
+              <OrdemForm ordem={selectedOrdem} unidades={data.unidades} pendenciasPadrao={pendenciasPadrao.filter((item) => item.ativo)} responsavelOptions={responsavelOptions} onSubmit={submitOrdem} />
+            </section>
           </section>
         )}
 
@@ -1700,8 +1784,11 @@ export function App() {
           <HistoricoUnidadePage
             unidade={selectedMapaUnidade}
             eventos={historicoUnidade}
+            projetos={projetos}
             loading={historyLoading}
+            canEdit={isGestor}
             onBack={() => setPage("mapa")}
+            onSubmit={submitHistoricoUnidade}
           />
         )}
 
@@ -1926,13 +2013,19 @@ function UnidadesMap({
 function HistoricoUnidadePage({
   unidade,
   eventos,
+  projetos,
   loading,
-  onBack
+  canEdit,
+  onBack,
+  onSubmit
 }: {
   unidade: MapaUnidade | null;
   eventos: HistoricoUnidadeEvento[];
+  projetos: Projeto[];
   loading: boolean;
+  canEdit: boolean;
   onBack: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   if (!unidade) {
     return (
@@ -1963,6 +2056,44 @@ function HistoricoUnidadePage({
           {unidade.googleMapsUrl && <a className="map-link" href={unidade.googleMapsUrl} target="_blank" rel="noreferrer">Abrir Google Maps</a>}
         </div>
       </section>
+      {canEdit && (
+        <section className="panel full">
+          <div className="panel-heading"><h2>Registrar evento da unidade</h2></div>
+          <form className="form-grid history-event-form" onSubmit={onSubmit}>
+            <input type="hidden" name="idUnidade" value={unidade.idUnidade} />
+            <label>
+              Tipo
+              <select name="tipoEvento" defaultValue="manutencao">
+                <option value="manutencao">Manutencao</option>
+                <option value="realocacao">Realocacao</option>
+                <option value="reforma">Reforma</option>
+                <option value="mudanca_contrato">Mudanca de contrato/projeto</option>
+                <option value="registro">Registro geral</option>
+              </select>
+            </label>
+            <label>
+              Data
+              <input name="dataEvento" type="datetime-local" />
+            </label>
+            <label className="wide">
+              Novo projeto/contrato
+              <select name="idProjetoNovo" defaultValue="">
+                <option value="">Manter projeto atual</option>
+                {projetos.filter((projeto) => projeto.ativo).map((projeto) => (
+                  <option key={projeto.idProjeto} value={projeto.idProjeto}>
+                    {projeto.nome} · {projeto.contratoNumero || "Contrato nao informado"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="wide">
+              Descricao
+              <textarea name="descricao" rows={3} required placeholder="Ex.: unidade reformada, realocada para novo endereco, alterada para outro contrato ou detalhe da manutencao" />
+            </label>
+            <button className="primary-button"><Plus size={16} />Registrar evento</button>
+          </form>
+        </section>
+      )}
       <section className="panel full">
         <div className="panel-heading"><h2>Linha do tempo</h2><span>{eventos.length} eventos</span></div>
         <div className="history-timeline">
@@ -2058,27 +2189,33 @@ function AuthScreen({
 }
 
 function OrdemForm({
+  ordem,
   unidades,
   pendenciasPadrao,
   responsavelOptions,
   onSubmit
 }: {
+  ordem?: Ordem | null;
   unidades: Unidade[];
   pendenciasPadrao: PendenciaPadrao[];
   responsavelOptions: ResponsavelOption[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const responsaveisSelecionados = ordem?.responsavel.split(",").map((item) => item.trim()).filter(Boolean) || [];
+  const pendenciasSelecionadas = new Set(ordem?.pendencias || []);
+
   return (
-    <form className="form-grid" onSubmit={onSubmit}>
+    <form key={ordem?.id || "new"} className="form-grid" onSubmit={onSubmit}>
       <label>
         Unidade
-        <select name="unidadeId" required>
+        <select name="unidadeId" defaultValue={ordem?.unidadeId || ""} required>
+          <option value="" disabled>Selecione</option>
           {unidades.map((unidade) => <option key={unidade.id} value={unidade.id}>{unidade.nome}</option>)}
         </select>
       </label>
       <label>
         Tipo
-        <select name="tipo">
+        <select name="tipo" defaultValue={ordem?.tipo || "Corretiva"}>
           <option>Corretiva</option>
           <option>Preventiva</option>
           <option>Emergencial</option>
@@ -2086,7 +2223,7 @@ function OrdemForm({
       </label>
       <label>
         Prioridade
-        <select name="prioridade">
+        <select name="prioridade" defaultValue={ordem?.prioridade || "P2"}>
           <option>P2</option>
           <option>P1</option>
           <option>P3</option>
@@ -2095,14 +2232,26 @@ function OrdemForm({
       </label>
       <label>
         Prazo SLA
-        <input name="prazoSla" type="date" required />
+        <input name="prazoSla" type="date" defaultValue={ordem?.prazoSla || ""} required />
       </label>
+      {ordem && (
+        <label>
+          Status
+          <select name="status" defaultValue={ordem.status}>
+            <option>Aberta</option>
+            <option>Agendada</option>
+            <option>Em atendimento</option>
+            <option>Pendente</option>
+            <option>Concluida</option>
+          </select>
+        </label>
+      )}
       <fieldset className="responsible-field wide">
         <legend>Responsavel</legend>
         <div>
           {responsavelOptions.map((responsavel) => (
             <label key={responsavel.value}>
-              <input name="responsaveis" type="checkbox" value={responsavel.value} />
+              <input name="responsaveis" type="checkbox" value={responsavel.value} defaultChecked={responsaveisSelecionados.includes(responsavel.label)} />
               <span>{responsavel.label}<small>{responsavel.detail}</small></span>
             </label>
           ))}
@@ -2111,14 +2260,14 @@ function OrdemForm({
       </fieldset>
       <label className="wide">
         Descricao
-        <textarea name="descricao" placeholder="Resumo da solicitacao" rows={3} />
+        <textarea name="descricao" placeholder="Resumo da solicitacao" rows={3} defaultValue={ordem?.descricao || ""} />
       </label>
       <fieldset className="standard-pending-field wide">
-        <legend>Pendencias</legend>
+        <legend>{ordem ? "Adicionar pendencias" : "Pendencias"}</legend>
         <div>
           {pendenciasPadrao.map((pendencia) => (
             <label key={pendencia.idPendencia}>
-              <input name="pendenciasIds" type="checkbox" value={pendencia.idPendencia} />
+              <input name="pendenciasIds" type="checkbox" value={pendencia.idPendencia} defaultChecked={pendenciasSelecionadas.has(pendencia.descricao)} />
               <span>{pendencia.descricao}</span>
             </label>
           ))}
@@ -2126,8 +2275,8 @@ function OrdemForm({
         </div>
       </fieldset>
       <button className="primary-button">
-        <Plus size={16} />
-        Criar OS
+        {ordem ? <CheckCircle2 size={16} /> : <Plus size={16} />}
+        {ordem ? "Salvar OS" : "Criar OS"}
       </button>
     </form>
   );

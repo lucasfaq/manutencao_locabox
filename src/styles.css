@@ -902,6 +902,22 @@ main {
   background: #d97706;
 }
 
+.history-dot.manutencao {
+  background: #0891b2;
+}
+
+.history-dot.realocacao {
+  background: #7c3aed;
+}
+
+.history-dot.reforma {
+  background: #ca8a04;
+}
+
+.history-dot.mudanca_contrato {
+  background: #db2777;
+}
+
 .table-wrap {
   overflow: auto;
 }

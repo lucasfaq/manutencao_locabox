@@ -138,6 +138,7 @@ export type UnidadeInstalada = {
 
 export type MapaUnidade = {
   idUnidade: number;
+  idProjeto: number;
   codigo: string;
   nome: string;
   estado: string;
@@ -158,7 +159,7 @@ export type HistoricoUnidadeEvento = {
   idEvento: string;
   idUnidade: number;
   dataEvento: string;
-  tipoEvento: "registro" | "ordem" | "atendimento";
+  tipoEvento: "registro" | "ordem" | "atendimento" | "realocacao" | "reforma" | "mudanca_contrato" | "manutencao";
   titulo: string;
   descricao: string;
   statusCodigo: string | null;
@@ -664,7 +665,7 @@ const unidadeInstaladaFields = "id_unidade, id_projeto, codigo, nome, estado, ci
 function mapUnidadeInstalada(row: any): UnidadeInstalada {
   return {
     idUnidade: Number(row.id_unidade),
-    idProjeto: Number(row.id_projeto),
+    idProjeto: Number(row.id_projeto || 0),
     projetoNome: row.projetos?.nome || "",
     codigo: row.codigo,
     nome: row.nome,
@@ -683,6 +684,7 @@ function mapUnidadeInstalada(row: any): UnidadeInstalada {
 function mapMapaUnidade(row: any): MapaUnidade {
   return {
     idUnidade: Number(row.id_unidade),
+    idProjeto: Number(row.id_projeto || 0),
     codigo: row.codigo || "",
     nome: row.nome || "",
     estado: row.estado || "",
@@ -856,6 +858,39 @@ export async function loadHistoricoUnidade(idUnidade: number): Promise<Historico
     .order("data_evento", { ascending: false });
   if (error) throw error;
   return (data || []).map(mapHistoricoUnidadeEvento);
+}
+
+export async function createHistoricoUnidade(payload: Record<string, FormDataEntryValue>): Promise<void> {
+  const client = requireSupabase();
+  const idUnidade = Number(payload.idUnidade);
+  const idProjetoNovo = Number(payload.idProjetoNovo || 0);
+  let idProjetoAnterior: number | null = null;
+
+  if (idProjetoNovo > 0) {
+    const { data: unidadeAtual, error: unidadeError } = await client
+      .from("unidades_instaladas")
+      .select("id_projeto")
+      .eq("id_unidade", idUnidade)
+      .single();
+    if (unidadeError) throw unidadeError;
+    idProjetoAnterior = Number(unidadeAtual.id_projeto);
+
+    const { error: updateError } = await client
+      .from("unidades_instaladas")
+      .update({ id_projeto: idProjetoNovo })
+      .eq("id_unidade", idUnidade);
+    if (updateError) throw updateError;
+  }
+
+  const { error } = await client.from("historico_unidade").insert({
+    id_unidade: idUnidade,
+    tipo_evento: String(payload.tipoEvento || "registro"),
+    descricao: String(payload.descricao || "").trim(),
+    registrado_em: payload.dataEvento ? new Date(String(payload.dataEvento)).toISOString() : new Date().toISOString(),
+    id_projeto_anterior: idProjetoAnterior,
+    id_projeto_novo: idProjetoNovo > 0 ? idProjetoNovo : null
+  });
+  if (error) throw error;
 }
 
 export async function createSupabaseUnidadeInstalada(payload: Record<string, FormDataEntryValue>): Promise<UnidadeInstalada> {
@@ -1258,6 +1293,63 @@ export async function createSupabaseOrdem(payload: Record<string, FormDataEntryV
   }
 
   return mapOrdem({ ...data, pendencias_ordem: pendencias.map((descricao) => ({ id: 0, descricao, status: "Aberta" })) });
+}
+
+export async function updateSupabaseOrdem(id: number, payload: Record<string, FormDataEntryValue>): Promise<Ordem> {
+  const client = requireSupabase();
+  const row = {
+    unidade_id: Number(payload.unidadeId),
+    tipo: String(payload.tipo || "Corretiva"),
+    prioridade: String(payload.prioridade || "P3"),
+    status: String(payload.status || "Aberta"),
+    prazo_sla: String(payload.prazoSla),
+    responsavel: String(payload.responsavel || "A definir"),
+    descricao: String(payload.descricao || "")
+  };
+  const { data, error } = await client.from("ordens").update(row).eq("id", id).select("*, pendencias_ordem(id, descricao, status)").single();
+  if (error) throw error;
+
+  const pendenciasIds = String(payload.pendenciasIds || "")
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isInteger(item) && item > 0);
+  const pendencias = pendenciasIds.length
+    ? await loadPendenciasPadrao().then((items) => items.filter((item) => pendenciasIds.includes(item.idPendencia)).map((item) => item.descricao))
+    : [];
+  const atuais = (data.pendencias_ordem || []).map((item: any) => String(item.descricao));
+  const novas = pendencias.filter((descricao) => !atuais.includes(descricao));
+
+  if (novas.length) {
+    const { error: pendenciaError } = await client.from("pendencias_ordem").insert(
+      novas.map((descricao) => ({ ordem_id: id, descricao }))
+    );
+    if (pendenciaError) throw pendenciaError;
+  }
+
+  const { data: updated, error: reloadError } = await client
+    .from("ordens")
+    .select("*, pendencias_ordem(id, descricao, status)")
+    .eq("id", id)
+    .single();
+  if (reloadError) throw reloadError;
+  return mapOrdem(updated);
+}
+
+export async function deleteSupabaseOrdem(ordem: Ordem): Promise<void> {
+  const client = requireSupabase();
+  const { count, error: countError } = await client
+    .from("atendimentos")
+    .select("id", { count: "exact", head: true })
+    .eq("ordem_id", ordem.id);
+  if (countError) throw countError;
+  if (Number(count || 0) > 0) {
+    throw new Error("Esta OS ja possui atendimento registrado. Para preservar o historico, altere o status em vez de excluir.");
+  }
+
+  const { error: pendenciasError } = await client.from("pendencias_ordem").delete().eq("ordem_id", ordem.id);
+  if (pendenciasError) throw pendenciasError;
+  const { error } = await client.from("ordens").delete().eq("id", ordem.id);
+  if (error) throw error;
 }
 
 export async function createSupabaseAtendimento(payload: Record<string, FormDataEntryValue>): Promise<Atendimento> {
