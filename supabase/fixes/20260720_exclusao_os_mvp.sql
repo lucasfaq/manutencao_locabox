@@ -13,6 +13,12 @@ grant select, insert, update, delete on table
   public.estoque
 to authenticated;
 
+grant select on table
+  public.estoque_materiais,
+  public.movimentacoes,
+  public.movimentacoes_estoque
+to authenticated;
+
 drop policy if exists "app_active_manage_pendencias_ordem" on public.pendencias_ordem;
 create policy "app_active_manage_pendencias_ordem"
 on public.pendencias_ordem for all
@@ -99,3 +105,160 @@ grant execute on function public.excluir_ordem_mvp(bigint) to authenticated;
 
 comment on function public.excluir_ordem_mvp(bigint)
   is 'Exclui OS MVP e seus vinculos operacionais somente quando nao ha material/baixa de estoque relacionada.';
+
+create or replace function public.listar_atendimento_mvp_movimentacoes(p_atendimento_ids bigint[])
+returns table (
+  id_atendimento bigint,
+  id_movimentacao integer,
+  data_movimentacao timestamptz,
+  tipo_codigo text,
+  material text,
+  codigo text,
+  quantidade numeric,
+  unidade_medida text,
+  origem text,
+  observacao text
+)
+language sql
+security definer
+set search_path = ''
+as $$
+  select
+    ids.id_atendimento,
+    m.id_movimentacao,
+    m.data_movimentacao,
+    m.tipo_codigo,
+    em.descricao as material,
+    coalesce(em.codigo, '') as codigo,
+    me.quantidade,
+    em.unidade_medida,
+    m.origem,
+    coalesce(m.observacao, '') as observacao
+  from unnest(coalesce(p_atendimento_ids, array[]::bigint[])) as ids(id_atendimento)
+  join public.movimentacoes m
+    on m.origem in (
+      concat('Atendimento MVP #', ids.id_atendimento),
+      concat('Estorno Atendimento MVP #', ids.id_atendimento)
+    )
+  join public.movimentacoes_estoque me
+    on me.id_movimentacao = m.id_movimentacao
+  join public.estoque_materiais em
+    on em.id_material = me.id_material
+  where private.has_active_profile((select auth.uid()))
+  order by ids.id_atendimento, m.data_movimentacao desc, m.id_movimentacao desc;
+$$;
+
+revoke execute on function public.listar_atendimento_mvp_movimentacoes(bigint[]) from public, anon;
+grant execute on function public.listar_atendimento_mvp_movimentacoes(bigint[]) to authenticated;
+
+comment on function public.listar_atendimento_mvp_movimentacoes(bigint[])
+  is 'Lista movimentacoes de estoque originadas ou estornadas por atendimentos MVP.';
+
+create or replace function public.estornar_atendimento_mvp_materiais(p_atendimento_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  origem_atendimento text;
+  origem_estorno text;
+  created_movimentacao_id integer;
+  movimentos_original integer;
+  item record;
+begin
+  if not private.has_active_profile((select auth.uid())) then
+    raise exception 'Usuario sem perfil ativo';
+  end if;
+
+  if not exists (
+    select 1
+    from public.perfis p
+    where p.id = (select auth.uid())
+      and p.ativo = true
+      and p.perfil = 'gestor'
+  ) then
+    raise exception 'Somente gestores podem estornar materiais de atendimento';
+  end if;
+
+  if p_atendimento_id is null then
+    raise exception 'Atendimento obrigatorio';
+  end if;
+
+  if not exists (select 1 from public.atendimentos a where a.id = p_atendimento_id) then
+    raise exception 'Atendimento inexistente';
+  end if;
+
+  origem_atendimento := concat('Atendimento MVP #', p_atendimento_id);
+  origem_estorno := concat('Estorno Atendimento MVP #', p_atendimento_id);
+
+  if exists (select 1 from public.movimentacoes m where m.origem = origem_estorno) then
+    delete from public.atendimento_materiais
+    where atendimento_id = p_atendimento_id;
+    return;
+  end if;
+
+  select count(*)
+  into movimentos_original
+  from public.movimentacoes m
+  join public.movimentacoes_estoque me
+    on me.id_movimentacao = m.id_movimentacao
+  where m.origem = origem_atendimento
+    and m.tipo_codigo = 'saida';
+
+  if movimentos_original = 0 then
+    delete from public.atendimento_materiais
+    where atendimento_id = p_atendimento_id;
+    return;
+  end if;
+
+  insert into public.movimentacoes (
+    data_movimentacao,
+    tipo_codigo,
+    origem,
+    observacao,
+    criado_por
+  )
+  values (
+    now(),
+    'entrada',
+    origem_estorno,
+    'Estorno de material para liberar exclusao/cancelamento de OS MVP',
+    (select auth.uid())
+  )
+  returning id_movimentacao into created_movimentacao_id;
+
+  for item in
+    select
+      me.id_material,
+      sum(me.quantidade) as quantidade
+    from public.movimentacoes m
+    join public.movimentacoes_estoque me
+      on me.id_movimentacao = m.id_movimentacao
+    where m.origem = origem_atendimento
+      and m.tipo_codigo = 'saida'
+    group by me.id_material
+    having sum(me.quantidade) <> 0
+  loop
+    insert into public.movimentacoes_estoque (
+      id_movimentacao,
+      id_material,
+      quantidade
+    )
+    values (
+      created_movimentacao_id,
+      item.id_material,
+      item.quantidade
+    );
+  end loop;
+
+  delete from public.atendimento_materiais
+  where atendimento_id = p_atendimento_id;
+end;
+$$;
+
+revoke execute on function public.estornar_atendimento_mvp_materiais(bigint) from public, anon;
+grant execute on function public.estornar_atendimento_mvp_materiais(bigint) to authenticated;
+
+comment on function public.estornar_atendimento_mvp_materiais(bigint)
+  is 'Registra entrada de estorno para materiais de atendimento MVP e remove o bloqueio operacional de exclusao.';

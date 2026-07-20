@@ -32,6 +32,7 @@ import {
   AdminUser,
   Atendimento,
   AtendimentoMaterialUso,
+  AtendimentoMovimentacao,
   Bootstrap,
   Cliente,
   Colaborador,
@@ -98,6 +99,8 @@ import {
   resolveGoogleMapsLink,
   deleteSupabaseAtendimento,
   deleteSupabaseOrdem,
+  estornarSupabaseAtendimentoMateriais,
+  loadAtendimentoMovimentacoes,
   updateAdminUser,
   updateEstoqueConfiguracao,
   updateSupabaseMaterial,
@@ -182,6 +185,11 @@ function describeAttendanceBlockers(atendimentos: Atendimento[]) {
     .join(" | ");
 }
 
+function formatMovementDate(value: string) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
 function StatusPill({ value }: { value: string }) {
   const tone = value === "Concluida" || value === "Executado" ? "ok" : value === "Pendente" || value === "Parcial" ? "warn" : "info";
   return <span className={`pill ${tone}`}>{value}</span>;
@@ -247,6 +255,7 @@ export function App() {
   const [estoquePlanejamento, setEstoquePlanejamento] = useState<EstoquePlanejamento[]>([]);
   const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null);
   const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null);
+  const [atendimentoMovimentacoes, setAtendimentoMovimentacoes] = useState<Record<number, AtendimentoMovimentacao[]>>({});
 
   const isGestor = perfil?.perfil === "gestor";
   const responsavelOptions = useMemo<ResponsavelOption[]>(
@@ -277,19 +286,23 @@ export function App() {
     setErrorMessage("");
     try {
       if (hasSupabaseConfig) {
-        setData(await loadSupabaseBootstrap());
+        const nextData = await loadSupabaseBootstrap();
+        setData(nextData);
+        setAtendimentoMovimentacoes(await loadAtendimentoMovimentacoes(nextData.atendimentos.map((atendimento) => atendimento.id)));
         setSource("supabase");
       } else {
         const response = await fetch("/api/bootstrap");
         if (!response.ok) throw new Error("API indisponivel");
         const nextData = (await response.json()) as Bootstrap;
         setData(nextData);
+        setAtendimentoMovimentacoes({});
         setSource("api");
       }
     } catch (error) {
       const response = await fetch(`${import.meta.env.BASE_URL}bootstrap.json`);
       const nextData = (await response.json()) as Bootstrap;
       setData(nextData);
+      setAtendimentoMovimentacoes({});
       setSource("static");
       setErrorMessage(error instanceof Error ? error.message : "Falha ao carregar dados dinamicos.");
     }
@@ -424,6 +437,7 @@ export function App() {
     if (!authReady) return;
     if (hasSupabaseConfig && !session) {
       setData(initialData);
+      setAtendimentoMovimentacoes({});
       setPerfil(null);
       setSource("supabase");
       setLoading(false);
@@ -1055,7 +1069,7 @@ export function App() {
     const atendimentosDaOrdem = data.atendimentos.filter((atendimento) => atendimento.ordemId === ordem.id);
     const bloqueios = describeAttendanceBlockers(atendimentosDaOrdem);
     if (bloqueios) {
-      setErrorMessage(`Esta OS possui atendimento com material lancado. Vinculos: ${bloqueios}. Para preservar o estoque, edite/cancele o status em vez de excluir.`);
+      setErrorMessage(`Esta OS possui atendimento com material lancado. Vinculos: ${bloqueios}. Abra Atendimentos e use o botao de estorno do atendimento antes de excluir a OS.`);
       return;
     }
     const detail = atendimentosDaOrdem.length ? ` e ${atendimentosDaOrdem.length} atendimento(s) vinculado(s)` : "";
@@ -1222,7 +1236,7 @@ export function App() {
 
   async function deleteAtendimento(atendimento: Atendimento) {
     if (atendimento.materiais.length > 0) {
-      setErrorMessage(`Este atendimento possui material lancado: ${atendimento.materiais.join("; ")}. Para preservar o estoque, edite o relato/status em vez de excluir.`);
+      setErrorMessage(`Este atendimento possui material lancado: ${atendimento.materiais.join("; ")}. Use o botao de estorno para devolver o material ao estoque antes de excluir.`);
       return;
     }
     if (!window.confirm(`Excluir atendimento #${atendimento.id}?`)) return;
@@ -1237,6 +1251,27 @@ export function App() {
       if (hasSupabaseConfig) await load();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Falha ao excluir atendimento.");
+    }
+  }
+
+  async function estornarAtendimentoMateriais(atendimento: Atendimento) {
+    if (!atendimento.materiais.length) return;
+    const detalhe = atendimento.materiais.join("; ");
+    if (!window.confirm(`Estornar materiais do atendimento #${atendimento.id}? Isso registra entrada reversa no estoque e libera a exclusao do atendimento/OS. Materiais: ${detalhe}`)) return;
+    setErrorMessage("");
+    try {
+      if (hasSupabaseConfig) {
+        await estornarSupabaseAtendimentoMateriais(atendimento);
+        await load();
+        await loadMateriais();
+        return;
+      }
+      setData((current) => withMetrics({
+        ...current,
+        atendimentos: current.atendimentos.map((item) => item.id === atendimento.id ? { ...item, materiais: [] } : item)
+      }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Falha ao estornar materiais do atendimento.");
     }
   }
 
@@ -1937,6 +1972,7 @@ export function App() {
                     {data.atendimentos.map((atendimento) => {
                       const ordem = data.ordens.find((item) => item.id === atendimento.ordemId);
                       const materiaisResumo = summarizeMaterials(atendimento.materiais);
+                      const movimentacoes = atendimentoMovimentacoes[atendimento.id] || [];
                       return (
                         <tr key={atendimento.id}>
                           <td><strong>#{atendimento.id}</strong><small>{atendimento.data}</small></td>
@@ -1946,10 +1982,23 @@ export function App() {
                           <td title={atendimento.materiais.join(" | ") || "Sem material"}>
                             <strong>{atendimento.materiais.length}</strong>
                             <small className={atendimento.materiais.length ? "relation-warning" : ""}>{materiaisResumo}</small>
+                            {movimentacoes.length > 0 && (
+                              <div className="movement-links">
+                                {movimentacoes.map((movimentacao) => (
+                                  <span key={`${movimentacao.idMovimentacao}-${movimentacao.material}-${movimentacao.tipoCodigo}`}>
+                                    #{movimentacao.idMovimentacao} {movimentacao.tipoCodigo} - {movimentacao.material} - {movimentacao.quantidade.toLocaleString("pt-BR")} {movimentacao.unidadeMedida}
+                                    <small>{formatMovementDate(movimentacao.dataMovimentacao)}</small>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div className="row-actions">
                               <button className="icon-button" title="Editar atendimento" onClick={() => setSelectedAtendimento(atendimento)}><Edit3 size={16} /></button>
+                              {isGestor && atendimento.materiais.length > 0 && (
+                                <button className="icon-button" title="Estornar materiais do atendimento" onClick={() => estornarAtendimentoMateriais(atendimento)}><RefreshCw size={16} /></button>
+                              )}
                               <button className="icon-button" title={atendimento.materiais.length ? `Exclusao bloqueada: ${atendimento.materiais.join(" | ")}` : "Excluir atendimento"} onClick={() => deleteAtendimento(atendimento)}><Trash2 size={16} /></button>
                             </div>
                           </td>

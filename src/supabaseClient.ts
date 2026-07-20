@@ -46,6 +46,19 @@ export type Atendimento = {
   materiais: string[];
 };
 
+export type AtendimentoMovimentacao = {
+  idAtendimento: number;
+  idMovimentacao: number;
+  dataMovimentacao: string;
+  tipoCodigo: string;
+  material: string;
+  codigo: string;
+  quantidade: number;
+  unidadeMedida: string;
+  origem: string;
+  observacao: string;
+};
+
 export type EstoqueItem = {
   id: number;
   item: string;
@@ -1358,6 +1371,41 @@ export async function createSupabaseAtendimento(payload: Record<string, FormData
   };
 }
 
+export async function loadAtendimentoMovimentacoes(atendimentoIds: number[]): Promise<Record<number, AtendimentoMovimentacao[]>> {
+  if (!atendimentoIds.length) return {};
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("listar_atendimento_mvp_movimentacoes", {
+    p_atendimento_ids: atendimentoIds
+  });
+
+  if (error) {
+    const message = String(error.message || "");
+    if (message.includes("Could not find the function") || message.includes("function public.listar_atendimento_mvp_movimentacoes")) {
+      return {};
+    }
+    throw error;
+  }
+
+  const rows = (data || []) as any[];
+  return rows.reduce((acc: Record<number, AtendimentoMovimentacao[]>, row: any) => {
+    const idAtendimento = Number(row.id_atendimento);
+    const item: AtendimentoMovimentacao = {
+      idAtendimento,
+      idMovimentacao: Number(row.id_movimentacao),
+      dataMovimentacao: row.data_movimentacao,
+      tipoCodigo: row.tipo_codigo,
+      material: row.material || "",
+      codigo: row.codigo || "",
+      quantidade: Number(row.quantidade),
+      unidadeMedida: row.unidade_medida || "",
+      origem: row.origem || "",
+      observacao: row.observacao || ""
+    };
+    acc[idAtendimento] = [...(acc[idAtendimento] || []), item];
+    return acc;
+  }, {});
+}
+
 export async function updateSupabaseAtendimento(id: number, payload: Record<string, FormDataEntryValue>): Promise<Atendimento> {
   const client = requireSupabase();
   const row = {
@@ -1398,6 +1446,18 @@ export async function deleteSupabaseAtendimento(atendimento: Atendimento): Promi
 
   const { error } = await client.from("atendimentos").delete().eq("id", atendimento.id);
   if (error) throw error;
+}
+
+export async function estornarSupabaseAtendimentoMateriais(atendimento: Atendimento): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc("estornar_atendimento_mvp_materiais", { p_atendimento_id: atendimento.id });
+  if (!error) return;
+
+  const message = String(error.message || "");
+  if (message.includes("Could not find the function") || message.includes("function public.estornar_atendimento_mvp_materiais")) {
+    throw new Error("O banco remoto ainda nao possui a funcao estornar_atendimento_mvp_materiais. Aplique novamente o SQL supabase/fixes/20260720_exclusao_os_mvp.sql no Supabase.");
+  }
+  throw error;
 }
 
 function parseAtendimentoMateriais(value: unknown): AtendimentoMaterialUso[] {
